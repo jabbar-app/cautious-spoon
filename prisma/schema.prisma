@@ -1,0 +1,890 @@
+generator client {
+  provider = "prisma-client-js"
+  // output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model admin_candidates {
+  id           BigInt     @id @default(autoincrement())
+  id_admin     String     @db.Uuid
+  id_candidate String     @db.VarChar(50)
+  created_at   DateTime?  @db.Timestamptz(6)
+  created_by   String?    @default("") @db.VarChar(50)
+  updated_at   DateTime?  @db.Timestamptz(6)
+  updated_by   String?    @default("") @db.VarChar(50)
+  deleted_at   DateTime?  @db.Timestamptz(6)
+  deleted_by   String?    @default("") @db.VarChar(50)
+  admins       admins     @relation(fields: [id_admin], references: [id], onDelete: Cascade, map: "fk_admins_admin_candidates")
+  candidates   candidates @relation(fields: [id_candidate], references: [id], onDelete: Cascade, map: "fk_candidates_admin_candidates")
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model admin_companies {
+  id_admin   String?   @db.VarChar(50)
+  id_company String?   @db.VarChar(50)
+  created_at DateTime? @db.Timestamptz(6)
+  created_by String?   @default("") @db.VarChar(50)
+  updated_at DateTime? @db.Timestamptz(6)
+  updated_by String?   @default("") @db.VarChar(50)
+  deleted_at DateTime? @db.Timestamptz(6)
+  deleted_by String?   @default("") @db.VarChar(50)
+
+  @@ignore
+}
+
+model admin_roles {
+  id_admin   String    @db.Uuid
+  id_role    BigInt
+  created_at DateTime? @db.Timestamptz(6)
+  created_by String?   @default("") @db.VarChar(50)
+  updated_at DateTime? @db.Timestamptz(6)
+  updated_by String?   @default("") @db.VarChar(50)
+  deleted_at DateTime? @db.Timestamptz(6)
+  deleted_by String?   @default("") @db.VarChar(50)
+
+  admins admins @relation(fields: [id_admin], references: [id], onDelete: Cascade, map: "fk_admins_admin_roles")
+  roles  roles  @relation(fields: [id_role], references: [id], onDelete: Cascade, map: "fk_roles_admin_roles")
+
+  @@id([id_admin, id_role]) // composite PK
+  @@index([id_role], map: "idx_admin_roles_id_role")
+}
+
+model admins {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email              String               @unique(map: "uni_admins_email") @db.VarChar(225)
+  password           String               @db.VarChar(225)
+  name               String?              @default("") @db.VarChar(225)
+  phone              String?              @default("") @db.VarChar(225)
+  photo              String?              @default("") @db.VarChar(225)
+  email_verified     Boolean?             @default(false)
+  email_verified_at  DateTime?            @db.Timestamptz(6)
+  last_login         DateTime?            @db.Timestamptz(6)
+  created_at         DateTime?            @db.Timestamptz(6)
+  updated_at         DateTime?            @db.Timestamptz(6)
+  is_creator         Boolean?             @default(false)
+  is_consultant      Boolean?             @default(false)
+  is_marketing       Boolean?             @default(false)
+  created_by         String?              @default("") @db.VarChar(50)
+  updated_by         String?              @default("") @db.VarChar(50)
+  deleted_at         DateTime?            @db.Timestamptz(6)
+  deleted_by         String?              @default("") @db.VarChar(50)
+  admin_candidates   admin_candidates[]
+  admin_roles        admin_roles[]
+  job_consultants    job_consultants[]
+  pic_handle_clients pic_handle_clients[] @ignore
+
+  admin_refresh_tokens admin_refresh_tokens[] @relation(map: "fk_admins_admin_refresh_tokens")
+}
+
+model application_histories {
+  id             BigInt       @id @default(autoincrement())
+  id_application String       @default("not null") @db.VarChar(50)
+  status         String?      @default("") @db.VarChar(100)
+  notes          String?      @default("")
+  interview_date DateTime?    @db.Timestamptz(6)
+  attendance     Boolean?     @default(false)
+  created_at     DateTime?    @db.Timestamptz(6)
+  created_by     String?      @default("") @db.VarChar(50)
+  updated_at     DateTime?    @db.Timestamptz(6)
+  updated_by     String?      @default("") @db.VarChar(50)
+  deleted_at     DateTime?    @db.Timestamptz(6)
+  deleted_by     String?      @default("") @db.VarChar(50)
+  applications   applications @relation(fields: [id_application], references: [id], onDelete: Cascade, map: "fk_applications_application_histories")
+}
+
+model applications {
+  id                    String                  @id @db.VarChar(50)
+  id_candidate          String                  @default("not null") @db.VarChar(50)
+  id_job_order          String                  @default("not null") @db.VarChar(50)
+  id_vacancy            String?                 @default("") @db.VarChar(50)
+  application_code      String?                 @default("")
+  scout_status          String?                 @default("") @db.VarChar(50)
+  progress              String?                 @default("") @db.VarChar(225)
+  status                String?                 @default("") @db.VarChar(225)
+  status_updated_at     DateTime?               @db.Timestamptz(6)
+  status_updated_by     String?                 @default("") @db.VarChar(50)
+  created_at            DateTime?               @db.Timestamptz(6)
+  created_by            String?                 @default("") @db.VarChar(50)
+  updated_at            DateTime?               @db.Timestamptz(6)
+  updated_by            String?                 @default("") @db.VarChar(50)
+  deleted_at            DateTime?               @db.Timestamptz(6)
+  deleted_by            String?                 @default("") @db.VarChar(50)
+  application_histories application_histories[]
+  candidates            candidates              @relation(fields: [id_candidate], references: [id], onDelete: Cascade, map: "fk_candidates_applications")
+  job_orders            job_orders              @relation(fields: [id_job_order], references: [id], onDelete: Cascade, map: "fk_job_orders_applications")
+}
+
+model blog_ids {
+  id           BigInt    @id @default(autoincrement())
+  title        String?
+  category     String?
+  publish_date DateTime? @db.Timestamptz(6)
+  content      String?
+  tag          String?   @db.VarChar(50)
+  images       String[]
+  link         String?
+  featured     Boolean?
+  visibility   Boolean?
+  status       BigInt?
+  views        BigInt?
+}
+
+model blog_news {
+  id           BigInt    @id @default(autoincrement())
+  title        String?   @default("")
+  category     String?   @default("")
+  publish_date DateTime? @db.Timestamptz(6)
+  content      String?   @default("")
+  tags         String[]  @default([])
+  images       String[]  @default([])
+  link         String?   @default("")
+  featured     Boolean?  @default(false)
+  is_visible   Boolean?  @default(true)
+  status       String?   @default("draft") @db.VarChar(50)
+  views        BigInt?   @default(0)
+  created_by   String?   @default("") @db.VarChar(225)
+  slug         String?   @default("") @db.VarChar(225)
+  created_at   DateTime? @db.Timestamptz(6)
+  updated_at   DateTime? @db.Timestamptz(6)
+  deleted_at   DateTime? @db.Timestamptz(6)
+}
+
+model blog_tags {
+  id         BigInt    @id @default(autoincrement())
+  tags       Json[]
+  created_at DateTime? @db.Timestamptz(6)
+  created_by String?   @db.VarChar(50)
+  updated_at DateTime? @db.Timestamptz(6)
+  updated_by String?   @db.VarChar(50)
+  deleted_at DateTime? @db.Timestamptz(6)
+}
+
+model candidate_bookmark_vacancies {
+  id           BigInt     @id @default(autoincrement())
+  id_candidate String     @db.VarChar(50)
+  id_vacancy   String     @db.VarChar(50)
+  created_at   DateTime?  @db.Timestamptz(6)
+  updated_at   DateTime?  @db.Timestamptz(6)
+  candidates   candidates @relation(fields: [id_candidate], references: [id], onDelete: Cascade, map: "fk_candidates_candidate_bookmark_vacancies")
+  vacancies    vacancies  @relation(fields: [id_vacancy], references: [id], onDelete: Cascade, map: "fk_vacancies_candidate_bookmark_vacancies")
+
+  @@unique([id_candidate, id_vacancy], map: "idx_candidates_vacancies")
+}
+
+model candidate_bookmark_webinars {
+  id           BigInt     @id @default(autoincrement())
+  id_candidate String     @db.VarChar(50)
+  id_webinar   String     @db.VarChar(50)
+  created_at   DateTime?  @db.Timestamptz(6)
+  updated_at   DateTime?  @db.Timestamptz(6)
+  candidates   candidates @relation(fields: [id_candidate], references: [id], onDelete: Cascade, map: "fk_candidates_candidate_bookmark_webinars")
+  webinars     webinars   @relation(fields: [id_webinar], references: [id], onDelete: Cascade, map: "fk_webinars_candidate_bookmark_webinars")
+
+  @@unique([id_candidate, id_webinar], map: "idx_candidates_webinars")
+}
+
+model candidate_certificates {
+  id                   BigInt    @id @default(autoincrement())
+  id_candidate         String?   @db.VarChar(50)
+  tag                  String?   @default("") @db.VarChar(100)
+  certificate_level    String?   @default("") @db.VarChar(100)
+  issue_date           DateTime? @db.Timestamptz(6)
+  is_verified          Boolean?  @default(false)
+  verification_date    DateTime? @db.Timestamptz(6)
+  id_admin_verificator String?   @default("")
+  created_at           DateTime? @db.Timestamptz(6)
+  updated_at           DateTime? @db.Timestamptz(6)
+}
+
+model candidate_programs {
+  id                       BigInt     @id @default(autoincrement())
+  id_candidate             String     @db.VarChar(50)
+  id_program               String     @db.VarChar(50)
+  status                   String?    @default("register") @db.VarChar(50)
+  is_mcu                   Boolean?   @default(false)
+  is_agree                 Boolean?   @default(false)
+  documents                Json[]
+  payment                  Json?      @default("{}")
+  is_passed_test           Boolean?
+  is_matches_requirement   Boolean?
+  reject_reason_matches    String?
+  reject_reason_not_passed String?
+  created_at               DateTime?  @db.Timestamptz(6)
+  updated_at               DateTime?  @db.Timestamptz(6)
+  test_schedule            String?    @default("")
+  candidates               candidates @relation(fields: [id_candidate], references: [id], onDelete: Cascade, map: "fk_candidates_candidate_programs")
+  programs                 programs   @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "fk_programs_candidate_programs")
+
+  @@unique([id_candidate, id_program], map: "idx_candidate_program")
+}
+
+model candidate_skills {
+  id                   BigInt      @id @default(autoincrement())
+  id_candidate         String?     @db.VarChar(50)
+  name                 String?     @default("") @db.VarChar(225)
+  tag                  String?     @default("") @db.VarChar(50)
+  certificate          String?     @default("")
+  level                String?     @default("") @db.VarChar(100)
+  issue_date           DateTime?   @db.Timestamptz(6)
+  is_verified          Boolean?    @default(false)
+  verification_date    DateTime?   @db.Timestamptz(6)
+  id_admin_verificator String?     @default("") @db.VarChar(50)
+  status               String?     @db.VarChar(5)
+  created_at           DateTime?   @db.Timestamptz(6)
+  updated_at           DateTime?   @db.Timestamptz(6)
+  deleted_at           DateTime?   @db.Timestamptz(6)
+  candidates           candidates? @relation(fields: [id_candidate], references: [id], onDelete: Cascade, map: "fk_candidates_candidate_skill")
+}
+
+model candidate_vacancies {
+  id                     BigInt      @id @default(autoincrement())
+  id_candidate           String?     @db.VarChar(50)
+  vacancy_id             String?     @db.VarChar(50)
+  status                 String?     @default("shortlisted") @db.VarChar(50)
+  application_code       String?     @default("") @db.VarChar(50)
+  scout_status           String?     @default("") @db.VarChar(50)
+  progress               String?     @default("")
+  cancel_notes           String?     @default("")
+  interview              Json?       @default("{}")
+  visa_history           String?     @default("")
+  visa_notes             String?     @default("")
+  visa_status            String?     @default("") @db.VarChar(50)
+  departure_notes        String?     @default("")
+  waiting_departure_note String?     @default("")
+  failed_notes           String?     @default("")
+  failed_reason          String?     @default("")
+  created_at             DateTime?   @db.Timestamptz(6)
+  updated_at             DateTime?   @db.Timestamptz(6)
+  deleted_at             DateTime?   @db.Timestamptz(6)
+  candidates             candidates? @relation(fields: [id_candidate], references: [id], onDelete: Cascade, map: "fk_candidates_candidate_vacancy")
+  vacancies              vacancies?  @relation(fields: [vacancy_id], references: [id], onDelete: Cascade, map: "fk_vacancies_candidate_vacancy")
+
+  @@unique([id_candidate, vacancy_id], map: "idx_candidate_vacancy")
+}
+
+model candidate_webinars {
+  id           BigInt     @id @default(autoincrement())
+  id_candidate String     @db.VarChar(50)
+  id_webinar   String     @db.VarChar(50)
+  status       String?    @default("register") @db.VarChar(50)
+  created_at   DateTime?  @db.Timestamptz(6)
+  updated_at   DateTime?  @db.Timestamptz(6)
+  candidates   candidates @relation(fields: [id_candidate], references: [id], onDelete: Cascade, map: "fk_candidates_candidate_webinar")
+  webinars     webinars   @relation(fields: [id_webinar], references: [id], onDelete: Cascade, map: "fk_webinars_candidate_webinar")
+
+  @@unique([id_candidate, id_webinar], map: "idx_candidate_webinar")
+}
+
+model candidate_work_exps {
+  id               BigInt      @id @default(autoincrement())
+  id_candidate     String?     @db.VarChar(50)
+  company          String?     @default("") @db.VarChar(255)
+  occupation       String?     @default("") @db.VarChar(255)
+  industry         String?     @default("") @db.VarChar(255)
+  start_year       String?     @default("") @db.VarChar(50)
+  start_month      String?     @default("") @db.VarChar(50)
+  end_year         String?     @default("") @db.VarChar(50)
+  end_month        String?     @default("") @db.VarChar(50)
+  so               String?     @default("") @db.VarChar(255)
+  description      String?     @default("")
+  certificate      String?     @default("")
+  certificate_test String?     @default("")
+  is_verified      Boolean?    @default(false)
+  field            String?     @default("")
+  tag              String?     @default("") @db.VarChar(50)
+  status           String?     @db.VarChar(5)
+  created_at       DateTime?   @db.Timestamptz(6)
+  updated_at       DateTime?   @db.Timestamptz(6)
+  deleted_at       DateTime?   @db.Timestamptz(6)
+  candidates       candidates? @relation(fields: [id_candidate], references: [id], onDelete: Cascade, map: "fk_candidates_candidate_work_exps")
+}
+
+model candidates {
+  id                           String                         @id @db.VarChar(50)
+  email                        String                         @unique(map: "uni_candidates_email") @db.VarChar(225)
+  password                     String                         @db.VarChar(225)
+  onboarding                   Boolean?                       @default(false)
+  verified                     Json?                          @default("{}")
+  talent_id                    String?                        @default("") @db.VarChar(100)
+  name                         String?                        @default("") @db.VarChar(225)
+  sex                          String?                        @default("") @db.VarChar(10)
+  address_info                 Json?                          @default("{}")
+  birth_info                   Json?                          @default("{}")
+  document                     Json?                          @default("{}")
+  education                    Json?                          @default("{}")
+  phone                        String?                        @default("") @db.VarChar(50)
+  marital_status               String?                        @default("") @db.VarChar(225)
+  religion                     String?                        @default("") @db.VarChar(225)
+  email_verified               Boolean?                       @default(false)
+  email_verified_at            DateTime?                      @db.Timestamptz(6)
+  last_login                   DateTime?                      @db.Timestamptz(6)
+  status                       Int?                           @default(1)
+  created_at                   DateTime?                      @db.Timestamptz(6)
+  updated_at                   DateTime?                      @db.Timestamptz(6)
+  deleted_at                   DateTime?                      @db.Timestamptz(6)
+  password_updated_at          DateTime?                      @db.Timestamptz(6)
+  admin_candidates             admin_candidates[]
+  applications                 applications[]
+  candidate_bookmark_vacancies candidate_bookmark_vacancies[]
+  candidate_bookmark_webinars  candidate_bookmark_webinars[]
+  candidate_programs           candidate_programs[]
+  candidate_skills             candidate_skills[]
+  candidate_vacancies          candidate_vacancies[]
+  candidate_webinars           candidate_webinars[]
+  candidate_work_exps          candidate_work_exps[]
+}
+
+model cities {
+  id          BigInt      @id @default(autoincrement())
+  province_id BigInt
+  city        String      @db.VarChar(100)
+  capital     String      @db.VarChar(100)
+  k_bsni      String      @db.VarChar(3)
+  provinces   provinces   @relation(fields: [province_id], references: [id], onDelete: Cascade, map: "fk_provinces_cities")
+  districts   districts[]
+
+  @@index([city], map: "idx_cities_city")
+  @@index([id], map: "idx_cities_id")
+  @@index([k_bsni], map: "idx_cities_k_bsni")
+  @@index([province_id], map: "idx_cities_province_id")
+}
+
+model companies {
+  id                String              @id @db.VarChar(50)
+  name              String?             @default("") @db.VarChar(225)
+  so_name           String?             @default("") @db.VarChar(225)
+  phone             String?             @default("") @db.VarChar(225)
+  website           String?             @default("") @db.VarChar(225)
+  prefecture        String?             @default("") @db.VarChar(225)
+  city              String?             @default("") @db.VarChar(225)
+  street            String?             @default("") @db.VarChar(225)
+  postal_code       String?             @default("") @db.VarChar(225)
+  description       String?             @default("")
+  employee          String?             @default("") @db.VarChar(225)
+  industry          String[]            @default([])
+  cover             String?             @default("")
+  logo              String?             @default("")
+  contracts         Json[]
+  is_listed         Boolean?            @default(false)
+  director          String?             @default("") @db.VarChar(255)
+  country           String?             @default("") @db.VarChar(225)
+  status            String?             @default("new_registered") @db.VarChar(50)
+  phase             String?             @default("DEFAULT") @db.VarChar(50)
+  code              String?             @default("")
+  created_at        DateTime?           @db.Timestamptz(6)
+  created_by        String?             @default("") @db.VarChar(50)
+  updated_at        DateTime?           @db.Timestamptz(6)
+  updated_by        String?             @default("") @db.VarChar(50)
+  deleted_at        DateTime?           @db.Timestamptz(6)
+  deleted_by        String?             @default("") @db.VarChar(50)
+  status_updated_at DateTime?           @db.Timestamptz(6)
+  status_updated_by String?             @default("") @db.VarChar(50)
+  type              String?             @default("") @db.VarChar(225)
+  line_business     String?             @default("") @db.VarChar(225)
+  establishment     String?             @default("") @db.VarChar(225)
+  fee               String?             @default("") @db.VarChar(225)
+  employers         employers[]
+  jp_profile_scouts jp_profile_scouts[]
+}
+
+model districts {
+  id            BigInt          @id @default(autoincrement())
+  city_id       BigInt
+  district      String          @db.VarChar(100)
+  cities        cities          @relation(fields: [city_id], references: [id], onDelete: Cascade, map: "fk_cities_districts")
+  sub_districts sub_districts[]
+
+  @@index([city_id], map: "idx_districts_city_id")
+  @@index([district], map: "idx_districts_district")
+  @@index([id], map: "idx_districts_id")
+}
+
+model employers {
+  id                  String       @id @db.VarChar(50)
+  id_company          String?      @db.VarChar(50)
+  email               String       @unique(map: "uni_employers_email") @db.VarChar(255)
+  password            String       @db.VarChar(255)
+  onboarding          Boolean?     @default(false)
+  name                String?      @default("") @db.VarChar(255)
+  department          String?      @default("") @db.VarChar(255)
+  phone               String?      @default("") @db.VarChar(20)
+  photo               String?      @default("")
+  email_verified      Boolean?     @default(false)
+  email_verified_at   DateTime?    @db.Timestamptz(6)
+  is_active           Boolean?
+  last_login          DateTime?    @db.Timestamptz(6)
+  website             String?      @default("")
+  is_admin            Boolean?     @default(false)
+  password_updated_at DateTime?    @db.Timestamptz(6)
+  created_at          DateTime?    @db.Timestamptz(6)
+  created_by          String?      @default("") @db.VarChar(50)
+  updated_at          DateTime?    @db.Timestamptz(6)
+  updated_by          String?      @default("") @db.VarChar(50)
+  deleted_at          DateTime?    @db.Timestamptz(6)
+  deleted_by          String?      @default("") @db.VarChar(50)
+  companies           companies?   @relation(fields: [id_company], references: [id], onDelete: Cascade, map: "fk_companies_employer")
+  job_orders          job_orders[]
+}
+
+model job_categories {
+  id           BigInt    @id @default(autoincrement())
+  category_ind String?   @default("") @db.VarChar(225)
+  category_jpn String?   @default("") @db.VarChar(225)
+  category_eng String?   @default("") @db.VarChar(225)
+  created_at   DateTime? @db.Timestamptz(6)
+  created_by   String?   @default("") @db.VarChar(50)
+  updated_at   DateTime? @db.Timestamptz(6)
+  updated_by   String?   @default("") @db.VarChar(50)
+  deleted_at   DateTime? @db.Timestamptz(6)
+  deleted_by   String?   @default("") @db.VarChar(50)
+}
+
+model job_consultants {
+  id           BigInt     @id @default(autoincrement())
+  id_job_order String     @db.VarChar(50)
+  id_admin     String     @db.Uuid
+  admins       admins     @relation(fields: [id_admin], references: [id], onDelete: Cascade, map: "fk_admins_job_consultants")
+  job_orders   job_orders @relation(fields: [id_job_order], references: [id], onDelete: Cascade, map: "fk_job_orders_job_consultants")
+
+  @@index([id], map: "idx_job_consultants_id")
+}
+
+model job_industries {
+  id           String        @id @db.VarChar(50)
+  industry_ind String?
+  industry_jpn String?
+  industry_eng String?
+  tag          String?       @db.VarChar(10)
+  created_at   DateTime?     @db.Timestamptz(6)
+  updated_at   DateTime?     @db.Timestamptz(6)
+  deleted_at   DateTime?     @db.Timestamptz(6)
+  occupations  occupations[]
+}
+
+model job_orders {
+  id                      String               @id @db.VarChar(50)
+  id_employer             String?              @default("") @db.VarChar(50)
+  job_type                String?              @default("") @db.VarChar(225)
+  job_owner               String?              @default("") @db.VarChar(50)
+  job_title               String?              @default("") @db.VarChar(225)
+  request_reason          String?              @default("")
+  status                  String?              @default("draft") @db.VarChar(225)
+  notes                   String?              @default("")
+  is_urgent               Boolean?             @default(false)
+  shortlist_deadline      String?              @default("") @db.VarChar(225)
+  is_allow_to_publish     Boolean?             @default(false)
+  is_display_company_name Boolean?             @default(false)
+  join_expect_date        DateTime?            @db.Timestamptz(6)
+  recruitment_deadline    DateTime?            @db.Timestamptz(6)
+  company_handled_tax     Boolean?             @default(false)
+  salary                  Json?
+  salary_remarks          String?              @default("") @db.VarChar(225)
+  deducions               Json[]
+  benefits                Json[]
+  allowances              Json[]
+  documents               Json[]
+  occupation              String?              @default("") @db.VarChar(225)
+  employment_type         String?              @default("") @db.VarChar(50)
+  orders                  Json?
+  work_location           String?              @default("")
+  position_level          String?              @default("") @db.VarChar(225)
+  job_description         String?              @default("")
+  requirements            Json[]
+  working_hours           Json[]
+  marital_status          String?              @default("") @db.VarChar(50)
+  matching_items          Json?
+  job_order_code          String?              @default("") @db.VarChar(225)
+  currency                String?              @default("") @db.VarChar(100)
+  is_visible              Boolean?             @default(true)
+  last_opened_at          DateTime?            @db.Timestamptz(6)
+  created_at              DateTime?            @db.Timestamptz(6)
+  created_by              String?              @default("") @db.VarChar(50)
+  updated_at              DateTime?            @db.Timestamptz(6)
+  updated_by              String?              @default("") @db.VarChar(50)
+  deleted_at              DateTime?            @db.Timestamptz(6)
+  deleted_by              String?              @default("") @db.VarChar(50)
+  status_updated_at       DateTime?            @db.Timestamptz(6)
+  status_updated_by       String?              @default("") @db.VarChar(50)
+  job_industry            String?              @default("") @db.VarChar(50)
+  phases                  Json[]
+  job_category            String[]             @default([])
+  applications            applications[]
+  job_consultants         job_consultants[]
+  employers               employers?           @relation(fields: [id_employer], references: [id], onDelete: Cascade, map: "fk_employers_job_orders")
+  pic_handle_clients      pic_handle_clients[] @ignore
+  vacancies               vacancies[]
+}
+
+model jp_blog_categories {
+  id         BigInt    @id @default(autoincrement())
+  titles     Json[]
+  created_at DateTime? @db.Timestamptz(6)
+  created_by String?   @db.VarChar(50)
+  updated_at DateTime? @db.Timestamptz(6)
+  updated_by String?   @db.VarChar(50)
+  deleted_at DateTime? @db.Timestamptz(6)
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model jp_blog_category_coms {
+  title String?
+
+  @@ignore
+}
+
+model jp_blog_coms {
+  id           BigInt    @id @default(autoincrement())
+  title        String?
+  category     String?
+  publish_date DateTime? @db.Timestamptz(6)
+  content      String?
+  tag          String?   @db.VarChar(50)
+  images       String[]
+  link         String?
+  featured     Boolean?
+  visibility   Boolean?
+  status       BigInt?
+  views        BigInt?
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model jp_blog_tag_coms {
+  title String?
+
+  @@ignore
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model jp_blog_tags {
+  title String?
+
+  @@ignore
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model jp_news_categories {
+  title String?
+
+  @@ignore
+}
+
+model jp_news_coms {
+  id           BigInt    @id @default(autoincrement())
+  title        String?
+  category     String?
+  publish_date DateTime? @db.Timestamptz(6)
+  content      String?
+  tag          String?   @db.VarChar(50)
+  images       String[]
+  link         String?
+  featured     Boolean?
+  visibility   Boolean?
+  status       BigInt?
+  views        BigInt?
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model jp_news_tags {
+  title String?
+
+  @@ignore
+}
+
+model jp_profile_scouts {
+  id          BigInt     @id @default(autoincrement())
+  id_profile  BigInt?
+  id_company  String?    @db.VarChar(50)
+  id_vacancy  String?    @db.VarChar(50)
+  url_vacancy String?    @db.VarChar(225)
+  companies   companies? @relation(fields: [id_company], references: [id], onDelete: Cascade, map: "fk_companies_jp_profile_scout")
+  vacancies   vacancies? @relation(fields: [id_vacancy], references: [id], onDelete: Cascade, map: "fk_vacancies_jp_profile_scout")
+}
+
+model link_invitations {
+  id           Int       @id @default(autoincrement()) @db.SmallInt
+  type         String?
+  link         String?
+  expired_time DateTime? @db.Timestamptz(6)
+}
+
+model locations {
+  id      BigInt  @id @default(autoincrement())
+  city    String? @default("") @db.VarChar(225)
+  country String? @default("") @db.VarChar(225)
+}
+
+model migration_version {
+  id      BigInt  @id @default(autoincrement())
+  version BigInt?
+}
+
+model news_ids {
+  id           BigInt    @id @default(autoincrement())
+  title        String?
+  category     String?
+  publish_date DateTime? @db.Timestamptz(6)
+  content      String?
+  tag          String?   @db.VarChar(50)
+  images       String[]
+  link         String?
+  featured     Boolean?
+  visibility   Boolean?
+  status       BigInt?
+  views        BigInt?
+}
+
+model occupations {
+  id              String          @id @db.VarChar(50)
+  id_job_indsutry String?         @db.VarChar(50)
+  occupation_ind  String?
+  occupation_jpn  String?
+  occupation_eng  String?
+  tag             String?         @db.VarChar(10)
+  created_at      DateTime?       @db.Timestamptz(6)
+  updated_at      DateTime?       @db.Timestamptz(6)
+  deleted_at      DateTime?       @db.Timestamptz(6)
+  job_industries  job_industries? @relation(fields: [id_job_indsutry], references: [id], onDelete: Cascade, map: "fk_job_industries_occupations")
+}
+
+model permissions {
+  id               BigInt             @id @default(autoincrement())
+  title            String?            @unique(map: "uni_permissions_title") @default("")
+  created_at       DateTime?          @db.Timestamptz(6)
+  created_by       String?            @default("") @db.VarChar(50)
+  updated_at       DateTime?          @db.Timestamptz(6)
+  updated_by       String?            @default("") @db.VarChar(50)
+  deleted_at       DateTime?          @db.Timestamptz(6)
+  deleted_by       String?            @default("") @db.VarChar(50)
+  dynamic_title    String?            @default("")
+  description      String?            @default("")
+  role_permissions role_permissions[]
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model pic_handle_clients {
+  id_job_order String     @db.VarChar(50)
+  id_admin     String     @db.Uuid
+  created_at   DateTime?  @db.Timestamptz(6)
+  created_by   String?    @db.VarChar(50)
+  updated_at   DateTime?  @db.Timestamptz(6)
+  updated_by   String?    @db.VarChar(50)
+  deleted_at   DateTime?  @db.Timestamptz(6)
+  deleted_by   String?    @db.VarChar(50)
+  admins       admins     @relation(fields: [id_admin], references: [id], onDelete: Cascade, map: "fk_admins_pic_handle_clients")
+  job_orders   job_orders @relation(fields: [id_job_order], references: [id], onDelete: Cascade, map: "fk_job_orders_pic_handle_clients")
+
+  @@ignore
+}
+
+model prefectures {
+  id         String    @id @db.VarChar(50)
+  jp         String?   @default("") @db.VarChar(50)
+  idn        String?   @default("") @db.VarChar(50)
+  eng        String?   @default("") @db.VarChar(50)
+  created_at DateTime? @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
+}
+
+model programs {
+  id                 String               @id @db.VarChar(50)
+  title              String?              @default("")
+  registration_date  DateTime?            @db.Timestamptz(6)
+  program_start_date DateTime?            @db.Timestamptz(6)
+  training_centre    String?              @default("")
+  capacity           BigInt?
+  description        String?              @default("")
+  photo              String?              @default("")
+  price              BigInt?
+  duration           BigInt?
+  category           String?              @default("") @db.VarChar(225)
+  status             String?              @default("upcoming") @db.VarChar(50)
+  created_by         String?              @db.VarChar(225)
+  created_at         DateTime?            @db.Timestamptz(6)
+  updated_at         DateTime?            @db.Timestamptz(6)
+  is_active          Boolean?             @default(true)
+  is_visible         Boolean?             @default(true)
+  formulir           String[]             @default([])
+  test_schedules     Json[]
+  candidate_programs candidate_programs[]
+  webinars           webinars[]
+}
+
+model provinces {
+  id       BigInt   @id @default(autoincrement())
+  province String   @db.VarChar(100)
+  capital  String   @db.VarChar(100)
+  p_bsni   String   @db.VarChar(5)
+  cities   cities[]
+
+  @@index([capital], map: "idx_provinces_capital")
+  @@index([id], map: "idx_provinces_id")
+  @@index([p_bsni], map: "idx_provinces_p_bsni")
+  @@index([province], map: "idx_provinces_province")
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model role_permissions {
+  id_role       BigInt
+  id_permission BigInt
+  created_at    DateTime? @db.Timestamptz(6)
+  created_by    String?   @default("") @db.VarChar(50)
+  updated_at    DateTime? @db.Timestamptz(6)
+  updated_by    String?   @default("") @db.VarChar(50)
+  deleted_at    DateTime? @db.Timestamptz(6)
+  deleted_by    String?   @default("") @db.VarChar(50)
+
+  permissions permissions @relation(fields: [id_permission], references: [id], onDelete: Cascade, map: "fk_permissions_role_permissions")
+  roles       roles       @relation(fields: [id_role], references: [id], onDelete: Cascade, map: "fk_roles_role_permissions")
+
+  @@id([id_role, id_permission]) // composite PK
+  @@index([id_permission], map: "idx_role_permissions_id_permission")
+}
+
+model roles {
+  id               BigInt             @id @default(autoincrement())
+  title            String?            @unique(map: "uni_roles_title") @default("")
+  created_at       DateTime?          @db.Timestamptz(6)
+  created_by       String?            @default("") @db.VarChar(50)
+  updated_at       DateTime?          @db.Timestamptz(6)
+  updated_by       String?            @default("") @db.VarChar(50)
+  deleted_at       DateTime?          @db.Timestamptz(6)
+  deleted_by       String?            @default("") @db.VarChar(50)
+  description      String?            @default("")
+  admin_roles      admin_roles[]
+  role_permissions role_permissions[]
+}
+
+model skills {
+  id         BigInt    @id @default(autoincrement())
+  skill_ind  String?   @default("") @db.VarChar(225)
+  skill_eng  String?   @default("") @db.VarChar(225)
+  skill_jpn  String?   @default("") @db.VarChar(225)
+  created_at DateTime? @db.Timestamptz(6)
+  created_by String?   @default("") @db.VarChar(50)
+  updated_at DateTime? @db.Timestamptz(6)
+  updated_by String?   @default("") @db.VarChar(50)
+}
+
+model ssw_exam_infos {
+  id              BigInt   @id @default(autoincrement())
+  id_job_industry String?  @db.VarChar(50)
+  city            String?  @db.VarChar(225)
+  date            String[]
+}
+
+model sub_districts {
+  id           BigInt    @id @default(autoincrement())
+  district_id  BigInt
+  sub_district String    @db.VarChar(100)
+  postal_code  String    @db.VarChar(5)
+  districts    districts @relation(fields: [district_id], references: [id], onDelete: Cascade, map: "fk_districts_sub_districts")
+
+  @@index([district_id], map: "idx_sub_districts_district_id")
+  @@index([id], map: "idx_sub_districts_id")
+  @@index([postal_code], map: "idx_sub_districts_postal_code")
+  @@index([sub_district], map: "idx_sub_districts_sub_district")
+}
+
+model superadmins {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email      String?   @default("") @db.VarChar(50)
+  password   String?   @default("")
+  created_at DateTime? @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
+}
+
+model token_blacklists {
+  id            BigInt    @id @default(autoincrement())
+  refresh_token String?   @default("")
+  created_by    String?   @default("") @db.VarChar(50)
+  created_at    DateTime? @db.Timestamptz(6)
+  updated_at    DateTime? @db.Timestamptz(6)
+}
+
+model vacancies {
+  id                           String                         @id @db.VarChar(50)
+  id_job_order                 String                         @db.VarChar(50)
+  admin_publisher              String?                        @default("") @db.VarChar(50)
+  title                        String?                        @default("") @db.VarChar(225)
+  type                         String?                        @default("") @db.VarChar(50)
+  work_type                    String?                        @default("") @db.VarChar(225)
+  open_position                Int?                           @default(0)
+  industry                     String?                        @default("") @db.VarChar(225)
+  occupation                   String?                        @default("") @db.VarChar(225)
+  pay_type                     String?                        @default("") @db.VarChar(50)
+  currency                     String?                        @default("") @db.VarChar(50)
+  min_salary                   String?                        @default("") @db.VarChar(225)
+  max_salary                   String?                        @default("") @db.VarChar(225)
+  work_location                String?                        @default("") @db.VarChar(225)
+  description                  String?                        @default("")
+  requirements                 String?                        @default("")
+  phases                       Json[]
+  is_display_company           Boolean?                       @default(true)
+  images                       Json[]
+  status                       String?                        @default("") @db.VarChar(50)
+  publish_end_date             DateTime?                      @db.Timestamptz(6)
+  last_published_at            DateTime?                      @db.Timestamptz(6)
+  vacancy_code                 String?                        @default("") @db.VarChar(225)
+  is_visible                   Boolean?                       @default(true)
+  created_at                   DateTime?                      @db.Timestamptz(6)
+  created_by                   String?                        @default("") @db.VarChar(50)
+  updated_at                   DateTime?                      @db.Timestamptz(6)
+  updated_by                   String?                        @default("") @db.VarChar(50)
+  status_updated_at            DateTime?                      @db.Timestamptz(6)
+  status_updated_by            String?                        @default("") @db.VarChar(50)
+  deleted_at                   DateTime?                      @db.Timestamptz(6)
+  deleted_by                   String?                        @default("") @db.VarChar(50)
+  candidate_bookmark_vacancies candidate_bookmark_vacancies[]
+  candidate_vacancies          candidate_vacancies[]
+  jp_profile_scouts            jp_profile_scouts[]
+  job_orders                   job_orders                     @relation(fields: [id_job_order], references: [id], onDelete: Cascade, map: "fk_job_orders_vacancies")
+}
+
+model webinars {
+  id                          String                        @id @db.VarChar(50)
+  id_program                  String?                       @db.VarChar(50)
+  title                       String?                       @default("")
+  registration_date           DateTime?                     @db.Timestamptz(6)
+  webinar_date                DateTime?                     @db.Timestamptz(6)
+  capacity                    BigInt?
+  description                 String?                       @default("")
+  photo                       String?                       @default("")
+  link                        String?                       @default("")
+  price                       BigInt?
+  duration                    BigInt?
+  speakers                    String[]
+  category                    String?                       @default("")
+  status                      String?                       @default("upcoming") @db.VarChar(50)
+  is_visible                  Boolean?                      @default(true)
+  created_by                  String?                       @db.VarChar(225)
+  absen_code                  String?                       @default("") @db.VarChar(15)
+  absen_valid_date            DateTime?                     @db.Timestamptz(6)
+  created_at                  DateTime?                     @db.Timestamptz(6)
+  updated_at                  DateTime?                     @db.Timestamptz(6)
+  is_active                   Boolean?                      @default(true)
+  is_generated                Boolean?                      @default(false)
+  candidate_bookmark_webinars candidate_bookmark_webinars[]
+  candidate_webinars          candidate_webinars[]
+  programs                    programs?                     @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "fk_programs_webinars")
+}
+
+model admin_refresh_tokens {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  admin_id   String    @db.Uuid
+  token_hash String    @db.VarChar(255)
+  issued_at  DateTime  @db.Timestamptz(6)
+  expires_at DateTime  @db.Timestamptz(6)
+  revoked_at DateTime? @db.Timestamptz(6)
+  ip         String?   @db.VarChar(100)
+  user_agent String?   @db.VarChar(255)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+
+  admins admins @relation(fields: [admin_id], references: [id], onDelete: Cascade, map: "fk_admins_admin_refresh_tokens")
+
+  @@index([admin_id], map: "idx_admin_refresh_tokens_admin_id")
+  @@map("admin_refresh_tokens")
+}
