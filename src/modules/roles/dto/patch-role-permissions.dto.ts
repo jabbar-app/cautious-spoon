@@ -1,13 +1,16 @@
-import { IsArray, IsOptional, IsString } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
-export class PatchRolePermissionsDto {
-  @IsArray()
-  @IsString({ each: true })
-  @IsOptional()
-  attach?: string[]; // permission titles (slugs)
+// Accept 32 | "32" -> keep as string/number; service will coerce to the right DB type
+const idAtom = z.union([z.number(), z.string().trim()]);
 
-  @IsArray()
-  @IsString({ each: true })
-  @IsOptional()
-  detach?: string[]; // permission titles (slugs)
-}
+export const PatchRolePermissionsSchema = z.object({
+  attach: z.array(idAtom).optional().default([]),
+  detach: z.array(idAtom).optional().default([]),
+}).refine((val) => {
+  const A = new Set((val.attach ?? []).map((x) => String(x)));
+  return (val.detach ?? []).every((d) => !A.has(String(d)));
+}, { message: 'ATTACH_DETACH_OVERLAP' });
+
+export class PatchRolePermissionsDto extends createZodDto(PatchRolePermissionsSchema) {}
+export type PatchRolePermissions = z.infer<typeof PatchRolePermissionsSchema>;

@@ -1,3 +1,4 @@
+// src/common/filters/global-exception.filter.ts
 import {
   ArgumentsHost,
   Catch,
@@ -6,85 +7,87 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { randomUUID } from 'node:crypto';
-import { LoggerService } from '../../core/logger/logger.service';
+import { deepSerialize } from '../utils/serialize';
+import { randomUUID } from 'crypto';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
-  constructor(private readonly logger: LoggerService) {}
-
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const req = ctx.getRequest<Request>();
     const res = ctx.getResponse<Response>();
 
-    const now = new Date().toISOString();
-    let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let code = 'INTERNAL_ERROR';
-    let details = 'Internal Server Error';
+    const requestId =
+      (req?.headers?.['x-request-id'] as string) ||
+      (req as any)?.id ||
+      (req as any)?.requestId ||
+      randomUUID();
 
-    // Extract message & code safely
+    const apiVersion = process.env.API_VERSION || 'unversioned';
+
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let message = 'Internal Server Error';
+    let code = 'UNHANDLED_ERROR';
+    let details: string | null = null;
+    let fields: Record<string, string> | null = null;
+
     if (exception instanceof HttpException) {
-      status = exception.getStatus?.() ?? status;
-      const body = exception.getResponse?.();
-      if (typeof body === 'string') {
-        details = body;
-      } else if (body && typeof body === 'object') {
-        // common Nest shapes: { message: string | string[], error?: string, code?: string }
-        const anyBody = body as any;
-        const msg = Array.isArray(anyBody.message)
-          ? anyBody.message.join(', ')
-          : anyBody.message || anyBody.error;
-        if (msg) details = msg;
-        if (anyBody.code && typeof anyBody.code === 'string') code = anyBody.code;
+      status = exception.getStatus();
+      const resp = exception.getResponse();
+      if (typeof resp === 'string') {
+        message = resp;
+      } else if (resp && typeof resp === 'object') {
+        const r = resp as any;
+        message = r.message ?? message;
+        code = r.code ?? code;
+        details = r.details ?? null;
+
+        // Class-validator errors (if formatted)
+        if (Array.isArray(r.message) && r.message.length && typeof r.message[0] === 'string') {
+          details = r.message.join('; ');
+        }
+        if (r.errors && typeof r.errors === 'object') {
+          fields = r.errors as Record<string, string>;
+        }
+      } else {
+        message = exception.message ?? message;
+      }
+
+      if (code === 'UNHANDLED_ERROR') {
+        // Derive from exception name if useful
+        code = exception.name?.replace(/\W+/g, '_').toUpperCase() || code;
       }
     } else if (exception && typeof exception === 'object') {
-      const err = exception as any;
-      if (typeof err.status === 'number') status = err.status;
-      if (typeof err.code === 'string') code = err.code;
-      if (typeof err.message === 'string') details = err.message;
+      const anyErr = exception as any;
+      message = anyErr.message ?? message;
+      code = (anyErr.code ?? anyErr.name)?.toString()?.replace(/\W+/g, '_').toUpperCase() || code;
+      details = anyErr.stack ? (process.env.NODE_ENV === 'production' ? null : anyErr.stack) : null;
     }
 
-    // Ensure we have a request id
-    let requestId = (req.headers['x-request-id'] as string) || undefined;
-    if (!requestId) {
-      requestId = randomUUID();
-      res.setHeader('x-request-id', requestId);
+    // Never leak stack traces in production responses
+    if (process.env.NODE_ENV === 'production') {
+      details = null;
     }
 
-    // Console log with stack if present
-    const method = req.method;
-    const url = (req as any).originalUrl || req.url;
-    const stack =
-      (exception as any)?.stack && typeof (exception as any).stack === 'string'
-        ? (exception as any).stack
-        : undefined;
-
-    this.logger.error(
-      `[EXC] ${status} ${method} ${url} reqId=${requestId} code=${code} msg=${details}`,
-      stack,
-    );
-
-    // Standardized envelope
-    const payload = {
+    const envelope = {
       success: false,
-      message: HttpStatus[status] || 'Error',
+      message: message || 'Error',
       data: null,
-      error: {
+      error: deepSerialize({
         code,
         details,
-        fields: null,
-      },
+        fields,
+      }),
       meta: {
-        timestamp: now,
+        timestamp: new Date().toISOString(),
         requestId,
         traceId: null,
-        version: 'unversioned',
+        version: apiVersion,
       },
       pagination: null,
       links: null,
     };
 
-    res.status(status).json(payload);
+    res.status(status).json(envelope);
   }
 }

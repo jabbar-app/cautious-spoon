@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Ip, Post, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode ,HttpStatus, Ip, Post, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -12,8 +12,38 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  // ===== Super Admin =====
+  @Post('superadmin/login')
+  @HttpCode(HttpStatus.OK)
+  async superLogin(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth.loginSuperadmin(dto.email, dto.password, { res });
+  }
+
+  @Post('superadmin/refresh')
+  @HttpCode(HttpStatus.OK)
+  async superRefresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Ip() ip: string,
+  ) {
+    const ua = req.get('user-agent') ?? '';
+    const oldToken = (req as any).cookies?.super_refresh_token ?? '';
+    return this.auth.refreshGeneric(oldToken, 'superadmin', { ip, ua, res, cookieName: 'super_refresh_token' });
+  }
+
+  @Post('superadmin/logout')
+  async superLogout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const oldToken = (req as any).cookies?.super_refresh_token ?? '';
+    await this.auth.logoutGeneric(oldToken);
+    res.clearCookie('super_refresh_token', { path: '/' });
+    return { success: true };
+  }
   // ===== Admin =====
   @Post('admin/login')
+  @HttpCode(HttpStatus.OK)
   async adminLogin(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
@@ -25,6 +55,7 @@ export class AuthController {
   }
 
   @Post('admin/refresh')
+  @HttpCode(HttpStatus.OK)
   async adminRefresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -43,56 +74,38 @@ export class AuthController {
     return { success: true };
   }
 
-
-  // ===== Super Admin =====
-  @Post('superadmin/login')
-  async superLogin(
-    @Body() dto: LoginDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    return this.auth.loginSuperadmin(dto.email, dto.password, { res });
+  @Post('admin/forgot')
+  async adminForgot(@Body() dto: ForgotPasswordDto) {
+    return this.auth.forgotAdmin(dto);
   }
 
-  @Post('superadmin/refresh')
-  async superRefresh(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-    @Ip() ip: string,
-  ) {
-    const ua = req.get('user-agent') ?? '';
-    const oldToken = (req as any).cookies?.super_refresh_token ?? '';
-    return this.auth.refreshGeneric(oldToken, 'superadmin', { ip, ua, res, cookieName: 'super_refresh_token' });
-  }
-
-  @Post('superadmin/logout')
-  async superLogout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const oldToken = (req as any).cookies?.super_refresh_token ?? '';
-    await this.auth.logoutGeneric(oldToken);
-    res.clearCookie('super_refresh_token', { path: '/' });
-    return { success: true };
+  @Post('admin/reset')
+  async adminReset(@Body() dto: ResetPasswordDto) {
+    return this.auth.resetAdmin(dto);
   }
 
   // ===== Employer =====
-    @Post('employer/register')
-    async registerEmployer(@Body() dto: RegisterEmployerDto, @Res({ passthrough: true }) res: Response) {
-      const data = await this.auth.registerEmployer(dto, { res });
-      return {
-        success: true,
-        message: 'Verification email sent',
-        data,
-        error: null,
-        meta: {
-          timestamp: new Date().toISOString(),
-          requestId: (res.req as any).id ?? undefined,
-          traceId: null,
-          version: 'unversioned',
-        },
-        pagination: null,
-        links: null,
-      };
-    }
+  @Post('employer/register')
+  async registerEmployer(@Body() dto: RegisterEmployerDto, @Res({ passthrough: true }) res: Response) {
+    const data = await this.auth.registerEmployer(dto, { res });
+    return {
+      success: true,
+      message: 'Verification email sent',
+      data,
+      error: null,
+      meta: {
+        timestamp: new Date().toISOString(),
+        requestId: (res.req as any).id ?? undefined,
+        traceId: null,
+        version: 'unversioned',
+      },
+      pagination: null,
+      links: null,
+    };
+  }
 
   @Post('employer/login')
+  @HttpCode(HttpStatus.OK)
   async employerLogin(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
@@ -101,6 +114,7 @@ export class AuthController {
   }
 
   @Post('employer/refresh')
+  @HttpCode(HttpStatus.OK)
   async employerRefresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -118,7 +132,6 @@ export class AuthController {
     res.clearCookie('employer_refresh_token', { path: '/' });
     return { success: true };
   }
-
 
   @Get('employer/verify')
   async verifyEmployer(@Query('token') token: string, @Res({ passthrough: true }) res: Response) {
@@ -139,6 +152,20 @@ export class AuthController {
     };
   }
 
+  @Post('employer/resend-verify')
+  async resendEmployerVerify(@Body() dto: ResendVerifyDto) {
+    return this.auth.resendEmployerVerify(dto);
+  }
+
+  @Post('employer/forgot')
+  async employerForgot(@Body() dto: ForgotPasswordDto) {
+    return this.auth.forgotEmployer(dto);
+  }
+
+  @Post('employer/reset')
+  async employerReset(@Body() dto: ResetPasswordDto) {
+    return this.auth.resetEmployer(dto);
+  }
   // ===== Candidate =====
   @Post('candidate/register')
   async registerCandidate(@Body() dto: RegisterCandidateDto, @Res({ passthrough: true }) res: Response) {
@@ -168,6 +195,7 @@ export class AuthController {
   }
 
   @Post('candidate/refresh')
+  @HttpCode(HttpStatus.OK)
   async candidateRefresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -185,8 +213,6 @@ export class AuthController {
     res.clearCookie('candidate_refresh_token', { path: '/' });
     return { success: true };
   }
-
-
 
   @Get('candidate/verify')
   async verifyCandidate(@Query('token') token: string, @Res({ passthrough: true }) res: Response) {
@@ -212,35 +238,9 @@ export class AuthController {
     return this.auth.resendCandidateVerify(dto);
   }
 
-  @Post('employer/resend-verify')
-  async resendEmployerVerify(@Body() dto: ResendVerifyDto) {
-    return this.auth.resendEmployerVerify(dto);
-  }
-
-  @Post('admin/forgot')
-  async adminForgot(@Body() dto: ForgotPasswordDto) {
-    return this.auth.forgotAdmin(dto);
-  }
-
-  @Post('employer/forgot')
-  async employerForgot(@Body() dto: ForgotPasswordDto) {
-    return this.auth.forgotEmployer(dto);
-  }
-
   @Post('candidate/forgot')
   async candidateForgot(@Body() dto: ForgotPasswordDto) {
     return this.auth.forgotCandidate(dto);
-  }
-
-  // ======= RESET =======
-  @Post('admin/reset')
-  async adminReset(@Body() dto: ResetPasswordDto) {
-    return this.auth.resetAdmin(dto);
-  }
-
-  @Post('employer/reset')
-  async employerReset(@Body() dto: ResetPasswordDto) {
-    return this.auth.resetEmployer(dto);
   }
 
   @Post('candidate/reset')
@@ -248,3 +248,4 @@ export class AuthController {
     return this.auth.resetCandidate(dto);
   }
 }
+

@@ -1,12 +1,17 @@
-import { IsEmail, IsString, IsUrl, MaxLength } from 'class-validator';
+// import { IsEmail, IsString, IsUrl, MaxLength } from 'class-validator';
 
-export class ForgotPasswordDto {
-  @IsEmail()
-  @MaxLength(225)
-  email!: string;
+// export class ForgotPasswordDto {
+//   @IsEmail() @MaxLength(225) email!: string;
+//   @IsString() @IsUrl({ require_tld: false }) url!: string;
+// }
 
-  // Frontend "reset password" page, e.g. https://candidate.com/reset
-  @IsString()
-  @IsUrl({ require_tld: false }) // allow localhost during dev
-  url!: string;
-}
+
+import { z } from 'zod';
+import { createZodDto } from 'nestjs-zod';
+
+export const ForgotPasswordSchema = z.object({
+  email: z.email(),
+  url: z.url(),
+});
+
+export class ForgotPasswordDto extends createZodDto(ForgotPasswordSchema) {}

@@ -1,40 +1,61 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+// src/common/guards/permissions.guard.ts
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { REQ_PERMS } from '../decorators/permissions.decorator';
 import { PrismaService } from '../../core/database/prisma.service';
-import { PERMISSIONS_KEY } from '../../modules/rbac/permissions.decorator';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   constructor(private reflector: Reflector, private prisma: PrismaService) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
-    const required = this.reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [
+    const required = this.reflector.getAllAndOverride<string[]>(REQ_PERMS, [
       ctx.getHandler(),
       ctx.getClass(),
     ]);
+
+    // No permissions declared => allow (JWT guard still applies)
     if (!required || required.length === 0) return true;
 
     const req = ctx.switchToHttp().getRequest();
-    const user = req.user as { id?: string; sub?: string } | undefined;
-    const adminId = user?.id ?? user?.sub;
-    if (!adminId) return false;
+    const user = req.user as { id: string; typ: string } | undefined;
+    if (!user) throw new ForbiddenException('FORBIDDEN');
 
-    // 1) get role ids linked to this admin
-    const links = await this.prisma.admin_roles.findMany({
-      where: { id_admin: adminId },
-      select: { id_role: true },
-    });
-    if (links.length === 0) return false;
+    //Superadmin bypasses RBAC
+    if (user.typ === 'superadmin') return true;
 
-    // 2) get permissions of those roles
-    const rolePerms = await this.prisma.role_permissions.findMany({
-      where: { id_role: { in: links.map((l) => l.id_role) } },
-      select: { permissions: { select: { title: true } } },
+    // Only admin tokens proceed to RBAC checks
+    if (user.typ !== 'admin') throw new ForbiddenException('FORBIDDEN');
+
+    // Get roles for admin
+    const adminRoles = await this.prisma.admin_roles.findMany({
+      where: { id_admin: user.id },
+      include: { roles: true },
     });
 
-    const have = new Set(
-      rolePerms.map((rp) => rp.permissions?.title).filter((x): x is string => !!x),
-    );
-    return required.every((p) => have.has(p));
+    // Fast path (optional): system_admin role
+    if (adminRoles.some((ar) => ar.roles?.title === 'system_admin')) return true;
+
+    const roleIds = adminRoles.map((r) => r.id_role).filter((v) => v !== null) as bigint[];
+    if (roleIds.length === 0) throw new ForbiddenException('NO_ROLES');
+
+    const rolePermRows = await this.prisma.role_permissions.findMany({
+      where: { id_role: { in: roleIds } },
+      select: { id_permission: true },
+    });
+
+    const permIds = rolePermRows.map((rp) => rp.id_permission).filter((v) => v !== null) as bigint[];
+    if (permIds.length === 0) throw new ForbiddenException('NO_PERMISSIONS');
+
+    const perms = await this.prisma.permissions.findMany({
+      where: { id: { in: permIds } },
+      select: { title: true },
+    });
+
+    const have = new Set(perms.map((p) => p.title || '').filter(Boolean));
+    const ok = required.every((need) => have.has(need));
+    if (!ok) throw new ForbiddenException('MISSING_PERMISSION');
+
+    return true;
   }
 }

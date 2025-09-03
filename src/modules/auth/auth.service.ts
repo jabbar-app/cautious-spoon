@@ -1,67 +1,23 @@
-import { Injectable, ForbiddenException, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, ForbiddenException, UnauthorizedException, ConflictException,NotFoundException, HttpStatus, HttpException } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
-import { randomBytes } from 'crypto';
 import { RegisterEmployerDto } from './dto/register-employer.dto';
 import { RegisterCandidateDto } from './dto/register-candidate.dto';
 import { MailerService } from '../../core/mailer/mailer.service';
 import { randomUUID } from 'node:crypto';
 import { LoggerService } from '../../core/logger/logger.service';
 import { ResendVerifyDto } from './dto/resend-verify.dto';
-const RESEND_COOLDOWN_MS = 60_000;
-const lastSendAt = new Map<string, number>();
+import { safeBcryptCompare } from '../../common/utils/crypto';
+
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { buildVerifyUrl as buildUrlWithToken } from '../../common/utils/url'; // reuse helper; it just appends ?token=...
+import { rounds, findMatchingRefresh, buildVerifyUrl, setCookie, randomHex, parseTtlMs, hash, throttle } from './auth.helpers';
 
-
-
-
+const RESEND_COOLDOWN_MS = 60_000;
+const lastSendAt = new Map<string, number>();
 type UserType = 'admin' | 'superadmin' | 'employer' | 'candidate';
-
-// helpers
-function rounds() {
-  return Number(process.env.BCRYPT_ROUNDS || 10);
-}
-
-function buildVerifyUrl(baseUrl: string, token: string) {
-  const clean = baseUrl.replace(/\s+/g, '').replace(/\/+$/, '');
-  return `${clean}/verify?token=${encodeURIComponent(token)}`;
-}
-
-const FORGOT_COOLDOWN_MS = 60_000;
-const lastForgotAt = new Map<string, number>();
-
-
-function randomHex(len = 64) {
-  return randomBytes(len).toString('hex').slice(0, len);
-}
-function parseTtlMs(s: string): number {
-  const m = /^(\d+)([smhd])$/.exec(s);
-  if (!m) return Number(s) || 0;
-  const n = Number(m[1]), u = m[2];
-  return u === 's' ? n * 1_000 : u === 'm' ? n * 60_000 : u === 'h' ? n * 3_600_000 : n * 86_400_000;
-}
-function setCookie(res: any | undefined, name: string, value: string, expires: Date) {
-  if (!res) return;
-  res.cookie(name, value, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV !== 'development',
-    sameSite: 'lax',
-    expires,
-    path: '/',
-    // domain: process.env.COOKIE_DOMAIN || undefined,  // set this in prod if needed
-  });
-
-}
-
-async function findMatchingRefresh( plain: string, list: { id: string; token_hash: string; admin_id: string; expires_at: Date }[],) {
-  for (const t of list) {
-    if (await bcrypt.compare(plain, t.token_hash)) return t;
-  }
-  return null;
-}
 
 
 
@@ -74,8 +30,46 @@ export class AuthService {
     private logger: LoggerService,
   ) {}
 
-  private async hash(pw: string) {
-    return bcrypt.hash(pw, Number(process.env.BCRYPT_ROUNDS || 10));
+  // ===== Helpers =====
+  private async signAccess(sub: string, typ: UserType) {
+    return this.jwt.signAsync(
+      { sub, typ },
+      { secret: process.env.JWT_ACCESS_SECRET!, expiresIn: process.env.JWT_ACCESS_TTL ?? '15m' },
+    );
+  }
+
+  private async signRefreshJwt(sub: string, typ: Exclude<UserType, 'admin'>) {
+    const refreshPlain = await this.jwt.signAsync(
+      { sub, typ },
+      { secret: process.env.JWT_REFRESH_SECRET!, expiresIn: process.env.JWT_REFRESH_TTL ?? '30d' },
+    );
+    const expires_at = new Date(Date.now() + parseTtlMs(process.env.JWT_REFRESH_TTL ?? '30d'));
+    return { refreshPlain, expires_at };
+  }
+
+  private async buildAdminProfile(adminId: string) {
+    const a = await this.prisma.admins.findUnique({ where: { id: adminId } });
+    if (!a) return null;
+
+    const { roleTitles, permTitles } = await this.resolveAdminRoleTitlesAndPermissions(adminId);
+
+    // If you still need the stitched shape, attach it:
+    const stitched = { ...a, admin_roles: roleTitles.map((title) => ({ roles: { title } })) };
+
+    // Or, if you only need arrays of strings:
+    const roles = roleTitles;
+    const permissions = permTitles;
+
+    return {
+      id: a?.id!,
+      email: a?.email ?? '',
+      name: a?.name ?? '',
+      phone: a?.phone ?? '',
+      last_login: a?.last_login ?? null,
+      created_at: a?.created_at ?? null,
+      roles,
+      permissions: Array.from(permissions),
+    };
   }
 
   private signReset(payload: { email: string; typ: 'admin' | 'employer' | 'candidate' }) {
@@ -90,14 +84,6 @@ export class AuthService {
       token,
       { secret: process.env.JWT_RESET_SECRET || process.env.JWT_REFRESH_SECRET! },
     );
-  }
-
-  private throttle(key: string) {
-    const now = Date.now();
-    const last = lastForgotAt.get(key) || 0;
-    const throttled = now - last < FORGOT_COOLDOWN_MS;
-    if (!throttled) lastForgotAt.set(key, now);
-    return throttled;
   }
 
   private async resolveAdminRoleTitlesAndPermissions(adminId: string) {
@@ -133,16 +119,29 @@ export class AuthService {
     return { roleTitles, permTitles };
   }
 
+  private readonly SA_TITLES = (process.env.SUPERADMIN_ROLE_TITLES || 'system_admin').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+
   // ===== Admin (DB-backed rotating refresh) =====
   async loginAdmin(email: string, password: string, ctx: { ip: string; ua: string; res: any }) {
-    const admin = await this.prisma.admins.findFirst({ where: { email, deleted_at: null } });
-    if (!admin) throw new UnauthorizedException('INVALID_CREDENTIALS');
 
+    const admin = await this.prisma.admins.findFirst({
+      where: { email, deleted_at: null },
+    });
+
+    // Do not reveal which factor failed
+    if (!admin || !admin.password) {
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
+    }
+
+    // Safe bcrypt compare
     const ok = await bcrypt.compare(password, admin.password);
-    if (!ok) throw new UnauthorizedException('INVALID_CREDENTIALS');
+    if (!ok) {
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
+    }
 
     const accessToken = await this.signAccess(admin.id, 'admin');
 
+    // refresh token cookie
     const refreshPlain = randomHex(64);
     const token_hash = await bcrypt.hash(refreshPlain, rounds());
     const now = new Date();
@@ -275,7 +274,6 @@ export class AuthService {
     };
   }
 
-// Employer registration — UUID + atomic transaction + email verify
   async registerEmployer(dto: RegisterEmployerDto, _ctx: { res: any }) {
     const exists = await this.prisma.employers.findFirst({
       where: { email: dto.email, deleted_at: null },
@@ -337,7 +335,7 @@ export class AuthService {
     };
   }
 
-    async resendCandidateVerify(dto: ResendVerifyDto) {
+  async resendCandidateVerify(dto: ResendVerifyDto) {
     // soft anti-spam
     const key = `candidate:${dto.email}`;
     const last = lastSendAt.get(key) || 0;
@@ -381,7 +379,7 @@ export class AuthService {
     return { verification_sent: true };
   }
 
-    async resendEmployerVerify(dto: ResendVerifyDto) {
+  async resendEmployerVerify(dto: ResendVerifyDto) {
     const key = `employer:${dto.email}`;
     const last = lastSendAt.get(key) || 0;
     if (Date.now() - last < RESEND_COOLDOWN_MS) {
@@ -421,6 +419,7 @@ export class AuthService {
 
     return { verification_sent: true };
   }
+
   // ===== Superadmin / Employer / Candidate (JWT refresh + blacklist) =====
   async loginSuperadmin(email: string, password: string, ctx: { res: any }) {
     const s = await this.prisma.superadmins.findFirst({ where: { email } });
@@ -549,48 +548,6 @@ export class AuthService {
     return { ok: true };
   }
 
-  // ===== Helpers =====
-  private async signAccess(sub: string, typ: UserType) {
-    return this.jwt.signAsync(
-      { sub, typ },
-      { secret: process.env.JWT_ACCESS_SECRET!, expiresIn: process.env.JWT_ACCESS_TTL ?? '15m' },
-    );
-  }
-
-  private async signRefreshJwt(sub: string, typ: Exclude<UserType, 'admin'>) {
-    const refreshPlain = await this.jwt.signAsync(
-      { sub, typ },
-      { secret: process.env.JWT_REFRESH_SECRET!, expiresIn: process.env.JWT_REFRESH_TTL ?? '30d' },
-    );
-    const expires_at = new Date(Date.now() + parseTtlMs(process.env.JWT_REFRESH_TTL ?? '30d'));
-    return { refreshPlain, expires_at };
-  }
-
-  private async buildAdminProfile(adminId: string) {
-    const a = await this.prisma.admins.findUnique({ where: { id: adminId } });
-    if (!a) return null;
-
-    const { roleTitles, permTitles } = await this.resolveAdminRoleTitlesAndPermissions(adminId);
-
-    // If you still need the stitched shape, attach it:
-    const stitched = { ...a, admin_roles: roleTitles.map((title) => ({ roles: { title } })) };
-
-    // Or, if you only need arrays of strings:
-    const roles = roleTitles;
-    const permissions = permTitles;
-
-    return {
-      id: a?.id!,
-      email: a?.email ?? '',
-      name: a?.name ?? '',
-      phone: a?.phone ?? '',
-      last_login: a?.last_login ?? null,
-      created_at: a?.created_at ?? null,
-      roles,
-      permissions: Array.from(permissions),
-    };
-  }
-
   // Blacklist plain refresh tokens (non-admin) using bcrypt hash in token_blacklists
   private async isBlacklisted(plain: string) {
     const rows = await this.prisma.token_blacklists.findMany({});
@@ -652,73 +609,84 @@ export class AuthService {
   }
 
   async forgotAdmin(dto: ForgotPasswordDto) {
-    const key = `admin:${dto.email}`;
-    const throttled = this.throttle(key);
+    const key = `forgot:admin:${dto.email.toLowerCase()}`;
+    const throttled = throttle(key);
+    // if (await throttled) {
+    //   throw new HttpException('RESET_THROTTLED', HttpStatus.TOO_MANY_REQUESTS); // 429
+    // }
+    // if (await throttled) throw new TooManyRequestsException('RESET_THROTTLED');
 
-    // Read admin if exists (no info leaked)
-    const admin = await this.prisma.admins.findFirst({ where: { email: dto.email, deleted_at: null } });
-    try {
-      if (admin && !throttled) {
-        const token = await this.signReset({ email: admin.email, typ: 'admin' });
-        const url = buildUrlWithToken(dto.url, token);
-        await this.mailer.sendAdminPasswordReset({
-          template: 'core/mailer/admin/password_reset.html',
-          to: admin.email,
-          url,
-          subject: 'Reset Password Admin',
-          year: new Date().getFullYear().toString(),
-        });
-      }
-    } catch (err: any) {
-      this.logger.error(`[MAIL] admin forgot failed`, err?.stack || String(err));
-    }
-    return { ok: true, throttled };
+    const admin = await this.prisma.admins.findFirst({
+      where: { email: dto.email, deleted_at: null },
+    });
+    if (!admin) throw new NotFoundException('EMAIL_NOT_FOUND');
+
+    const token = await this.signReset({ email: admin.email, typ: 'admin' });
+    const url = buildUrlWithToken(dto.url, token);
+
+    await this.mailer.sendAdminPasswordReset({
+      template: 'core/mailer/admin/password_reset.html',
+      to: admin.email,
+      url,
+      subject: 'Reset Password Admin',
+      year: new Date().getFullYear().toString(),
+    });
+
+    return { ok: true };
   }
 
   async forgotEmployer(dto: ForgotPasswordDto) {
-    const key = `employer:${dto.email}`;
-    const throttled = this.throttle(key);
-
-    const emp = await this.prisma.employers.findFirst({ where: { email: dto.email, deleted_at: null } });
-    try {
-      if (emp && !throttled) {
-        const token = await this.signReset({ email: emp.email, typ: 'employer' });
-        const url = buildUrlWithToken(dto.url, token);
-        await this.mailer.sendEmployerPasswordReset({
-          template: 'core/mailer/templates/employer/password_reset.html',
-          to: emp.email,
-          url,
-          subject: 'Reset Password Perusahaan',
-          year: new Date().getFullYear().toString(),
-        });
-      }
-    } catch (err: any) {
-      this.logger.error(`[MAIL] employer forgot failed`, err?.stack || String(err));
+    const key = `forgot:employer:${dto.email.toLowerCase()}`;
+    const throttled = throttle(key);
+    if (await throttled) {
+      throw new HttpException('RESET_THROTTLED', HttpStatus.TOO_MANY_REQUESTS); // 429
     }
-    return { ok: true, throttled };
+    // if (await throttled) throw new TooManyRequestsException('RESET_THROTTLED');
+
+    const employer = await this.prisma.employers.findFirst({
+      where: { email: dto.email, deleted_at: null },
+    });
+    if (!employer) throw new NotFoundException('EMAIL_NOT_FOUND');
+
+    const token = await this.signReset({ email: employer.email, typ: 'employer' });
+    const url = buildUrlWithToken(dto.url, token);
+
+    await this.mailer.sendEmployerPasswordReset({
+      template: 'core/mailer/employer/password_reset.html',
+      to: employer.email,
+      url,
+      subject: 'Reset Password Employer',
+      year: new Date().getFullYear().toString(),
+    });
+
+    return { ok: true };
   }
 
+  // mirror for candidate
   async forgotCandidate(dto: ForgotPasswordDto) {
-    const key = `candidate:${dto.email}`;
-    const throttled = this.throttle(key);
-
-    const cand = await this.prisma.candidates.findFirst({ where: { email: dto.email, deleted_at: null } });
-    try {
-      if (cand && !throttled) {
-        const token = await this.signReset({ email: cand.email, typ: 'candidate' });
-        const url = buildUrlWithToken(dto.url, token);
-        await this.mailer.sendCandidatePasswordReset({
-          template: 'core/mailer/candidate/password_reset.html',
-          to: cand.email,
-          url,
-          subject: 'Atur Ulang Kata Sandi',
-          year: new Date().getFullYear().toString(),
-        });
-      }
-    } catch (err: any) {
-      this.logger.error(`[MAIL] candidate forgot failed`, err?.stack || String(err));
+    const key = `forgot:candidate:${dto.email.toLowerCase()}`;
+    const throttled = throttle(key);
+    if (await throttled) {
+      throw new HttpException('RESET_THROTTLED', HttpStatus.TOO_MANY_REQUESTS); // 429
     }
-    return { ok: true, throttled };
+
+    const candidate = await this.prisma.candidates.findFirst({
+      where: { email: dto.email, deleted_at: null },
+    });
+    if (!candidate) throw new NotFoundException('EMAIL_NOT_FOUND');
+
+    const token = await this.signReset({ email: candidate.email, typ: 'candidate' });
+    const url = buildUrlWithToken(dto.url, token);
+
+    await this.mailer.sendCandidatePasswordReset({
+      template: 'core/mailer/candidate/password_reset.html',
+      to: candidate.email,
+      url,
+      subject: 'Reset Password Candidate',
+      year: new Date().getFullYear().toString(),
+    });
+
+    return { ok: true };
   }
 
   // ===== Reset: Admin / Employer / Candidate =====
@@ -727,7 +695,7 @@ export class AuthService {
     if (decoded.purpose !== 'reset' || decoded.typ !== 'admin') {
       return { ok: true }; // generic
     }
-    const pw = await this.hash(dto.password);
+    const pw = await hash(dto.password);
 
     const admin = await this.prisma.admins.findFirst({ where: { email: decoded.email, deleted_at: null } });
     if (admin) {
@@ -751,7 +719,7 @@ export class AuthService {
     if (decoded.purpose !== 'reset' || decoded.typ !== 'employer') {
       return { ok: true };
     }
-    const pw = await this.hash(dto.password);
+    const pw = await hash(dto.password);
 
     const emp = await this.prisma.employers.findFirst({ where: { email: decoded.email, deleted_at: null } });
     if (emp) {
@@ -768,7 +736,7 @@ export class AuthService {
     if (decoded.purpose !== 'reset' || decoded.typ !== 'candidate') {
       return { ok: true };
     }
-    const pw = await this.hash(dto.password);
+    const pw = await hash(dto.password);
 
     const cand = await this.prisma.candidates.findFirst({ where: { email: decoded.email, deleted_at: null } });
     if (cand) {
