@@ -1,7 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import helmet from 'helmet';
-import { ValidationPipe } from '@nestjs/common';
 import { ResponseEnvelopeInterceptor } from './common/interceptors/response-envelope.interceptor';
 import { LoggerService } from './core/logger/logger.service';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -18,17 +17,7 @@ async function bootstrap() {
   app.use(cookieParser());
   app.enableShutdownHooks();
 
-  // Validation: Zod first (for new DTOs), then class-validator (for legacy DTOs)
-  app.useGlobalPipes(
-    new ZodValidationPipe(),
-    // new ValidationPipe({
-    //   whitelist: true,
-    //   transform: true,
-    //   transformOptions: { enableImplicitConversion: true },
-    //   forbidUnknownValues: false,
-    //   validationError: { target: false },
-    // }),
-  );
+  app.useGlobalPipes(new ZodValidationPipe());
 
   // Interceptors: logging outermost → envelope last
   app.useGlobalInterceptors(

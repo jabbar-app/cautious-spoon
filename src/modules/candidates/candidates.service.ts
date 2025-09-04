@@ -23,9 +23,71 @@ import {
   skillHasLevel,
 } from './candidate.helpers';
 
+
+function asStrId(v: any) {
+  return typeof v === 'bigint' ? v.toString() : v ?? null;
+}
+
+function mapIds<T extends Record<string, any>>(rows: T[] | null | undefined, key: string = 'id') {
+  return (Array.isArray(rows) ? rows : []).map((r) => ({
+    ...r,
+    [key]: asStrId(r[key]),
+  }));
+}
+
+function toKey(v: any): string {
+  return (v ?? '').toString();
+}
+
+// typed 2-tuple creator so TS knows it's exactly a [string, any]
+function kv<A = any>(row: A): [string, A] {
+  // @ts-expect-error — row.id is present in our selects; normalize to string
+  return [toKey(row.id), row] as [string, A];
+}
 @Injectable()
 export class CandidatesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async createCandidate(
+    dto: {
+      email: string; password: string; name?: string; phone?: string; sex?: string;
+      birth_date?: string; address_info?: any; birth_info?: any; document?: any; education?: any;
+      marital_status?: string; religion?: string; status?: number; onboarding?: boolean; verified?: any;
+      talent_id?: string; // ignored; we always auto-generate
+    },
+    actorId?: string,
+    actorType?: string,
+  ) {
+    const hash = await bcrypt.hash(dto.password, 12);
+    const talentId = await this.nextTalentId(); // always auto
+    const created = await this.prisma.candidates.create({
+      data: {
+        id: randomUUID(),
+        email: dto.email,
+        password: hash,
+        name: dto.name ?? '',
+        phone: dto.phone ?? '',
+        sex: dto.sex ?? '',
+        address_info: dto.address_info ?? {},
+        birth_info: dto.birth_info ?? {},
+        document: dto.document ?? {},
+        education: dto.education ?? {},
+        marital_status: dto.marital_status ?? '',
+        religion: dto.religion ?? '',
+        birth_date: dto.birth_date ? new Date(dto.birth_date) : null,
+        status: dto.status ?? 1,
+        onboarding: dto.onboarding ?? false,
+        verified: dto.verified ?? {},
+        talent_id: talentId,
+        created_at: new Date(),
+        created_by: actorId ?? '',
+      } as Prisma.candidatesCreateInput,
+      include: includeRelations,
+    });
+
+    // NOTE: no admin-candidate attachment here anymore.
+    return stripSensitive(created);
+  }
 
   async createByAdmin(
     dto: {
@@ -83,6 +145,84 @@ export class CandidatesService {
     return stripSensitive(created);
   }
 
+  async detailsExpanded(candidateId: string) {
+    // Base candidate + core relations (same includeRelations you already use)
+    const base = await this.prisma.candidates.findFirst({
+      where: { id: candidateId, deleted_at: null },
+      include: includeRelations,
+    });
+    if (!base) throw new NotFoundException({ code: 'CANDIDATE_NOT_FOUND', details: candidateId });
+
+    // 1) Work exps -> gather industry IDs (string-ish)
+    const works = Array.isArray(base.candidate_work_exps) ? base.candidate_work_exps : [];
+    const industryIds = Array.from(
+      new Set(
+        works
+          .map((w: any) => (w.industry ?? '').toString().trim())
+          .filter((x: string) => !!x),
+      ),
+    );
+
+    // 2) Link tables (webinars & vacancies)
+    const [webinarLinks, vacancyLinks] = await Promise.all([
+      this.prisma.candidate_webinars.findMany({
+        where: { id_candidate: candidateId, deleted_at: null },
+        select: { id: true, id_candidate: true, id_webinar: true, created_at: true, updated_at: true, deleted_at: true },
+      }),
+      this.prisma.candidate_vacancies.findMany({
+        where: { id_candidate: candidateId, deleted_at: null },
+        select: { id: true, id_candidate: true, vacancy_id: true, created_at: true, updated_at: true, deleted_at: true },
+      }),
+    ]);
+
+    const webinarIds = Array.from(new Set(webinarLinks.map((l) => toKey(l.id_webinar)).filter(Boolean)));
+    const vacancyIds = Array.from(new Set(vacancyLinks.map((l) => toKey(l.vacancy_id)).filter(Boolean)));
+
+    // 3) Fan-out fetches (details) — NOTE: industry table is job_industries
+    const [industries, webinars, vacancies] = await Promise.all([
+      industryIds.length
+        ? this.prisma.job_industries.findMany({ where: { id: { in: industryIds } } })
+        : Promise.resolve([]),
+      webinarIds.length
+        ? this.prisma.webinars.findMany({ where: { id: { in: webinarIds } } })
+        : Promise.resolve([]),
+      vacancyIds.length
+        ? this.prisma.vacancies.findMany({ where: { id: { in: vacancyIds } } })
+        : Promise.resolve([]),
+    ]);
+
+    // 4) Build typed maps (fixes TS2769/TS2322)
+    const industryMap = new Map<string, any>((industries ?? []).map(kv));
+    const webinarMap  = new Map<string, any>((webinars ?? []).map(kv));
+    const vacancyMap  = new Map<string, any>((vacancies ?? []).map(kv));
+
+    // 5) Enrich + stringify BigInt IDs
+    const enrichedWorks = mapIds(works).map((w: any) => ({
+      ...w,
+      industry_detail: industryMap.get(toKey(w.industry)) ?? null,
+    }));
+
+    const enrichedSkills = mapIds(base.candidate_skills);
+
+    const enrichedWebinars = mapIds(webinarLinks).map((l: any) => ({
+      ...l,
+      webinar: webinarMap.get(toKey(l.id_webinar)) ?? null,
+    }));
+
+    const enrichedVacancies = mapIds(vacancyLinks).map((l: any) => ({
+      ...l,
+      vacancy: vacancyMap.get(toKey(l.vacancy_id)) ?? null,
+    }));
+    // 5) Return unified shape (password stripped)
+    const safe = stripSensitive(base) as any;
+    safe.candidate_work_exps = enrichedWorks;
+    safe.candidate_skills = enrichedSkills;
+    safe.webinars = enrichedWebinars;
+    safe.vacancies = enrichedVacancies;
+
+    return safe;
+  }
+
   private async nextTalentId(): Promise<string> {
     const recent = await this.prisma.candidates.findMany({
         where: { talent_id: { not: '' } },
@@ -106,7 +246,8 @@ export class CandidatesService {
 
     const next = maxNum + 1;
     return next.toString().padStart(width, '0');
-    }
+  }
+
   // default: paginated; pass all=true to disable pagination
   async listAllWithRelations(q: ListCandidates) {
     const where: Prisma.candidatesWhereInput = {
@@ -299,7 +440,7 @@ export class CandidatesService {
     return { deleted: true, id };
   }
 
-  // --- ownership (admins ↔ candidates) ---
+  // -------- Admins <-> Candidate links (attach/detach) --------
   async setAdminOwners(candidateId: string, attachIds: string[], detachIds: string[], actorId?: string) {
     const exists = await this.prisma.candidates.findFirst({
       where: { id: candidateId, deleted_at: null },
@@ -321,12 +462,13 @@ export class CandidatesService {
       admins: owners.map((o: any) => o.admins),
     };
   }
-
+  // --- ownership (admins ↔ candidates) ---
   private async setAdminOwnersInternal(candidateId: string, attachIds: string[], detachIds: string[], actorId?: string) {
     const uniq = (arr: string[]) => Array.from(new Set(arr.map(String))).filter(Boolean);
     const attach = uniq(attachIds);
     const detach = uniq(detachIds);
 
+    // validate admin ids exist
     const union = uniq([...attach, ...detach]);
     if (union.length) {
       const admins = await this.prisma.admins.findMany({
@@ -334,16 +476,18 @@ export class CandidatesService {
         select: { id: true },
       });
       const ok = new Set(admins.map((a) => a.id));
-      attach.splice(0, attach.length, ...attach.filter((id) => ok.has(id)));
-      detach.splice(0, detach.length, ...detach.filter((id) => ok.has(id)));
+      // keep only valid admin IDs
+      for (let i = attach.length - 1; i >= 0; i--) if (!ok.has(attach[i])) attach.splice(i, 1);
+      for (let i = detach.length - 1; i >= 0; i--) if (!ok.has(detach[i])) detach.splice(i, 1);
     }
 
     await this.prisma.$transaction(async (tx) => {
-      const links = await tx.admin_candidates.findMany({
+      // find existing links for attach
+      const existing = await tx.admin_candidates.findMany({
         where: { id_candidate: candidateId, id_admin: { in: attach } },
         select: { id_admin: true, deleted_at: true },
       });
-      const map = new Map(links.map((l) => [l.id_admin, l.deleted_at]));
+      const map = new Map(existing.map((l) => [l.id_admin, l.deleted_at]));
 
       const toCreate: { id_candidate: string; id_admin: string; created_by?: string }[] = [];
       const toRevive: string[] = [];
@@ -356,6 +500,7 @@ export class CandidatesService {
       if (toCreate.length) {
         await tx.admin_candidates.createMany({ data: toCreate, skipDuplicates: true });
       }
+
       if (toRevive.length) {
         await tx.admin_candidates.updateMany({
           where: { id_candidate: candidateId, id_admin: { in: toRevive } },
@@ -370,5 +515,278 @@ export class CandidatesService {
         });
       }
     });
+  }
+
+  // …existing imports & class header…
+
+// ---------- Skills ----------
+  async addSkill(candidateId: string, dto: any /* , actorId?: string */) {
+    await this.ensureCandidate(candidateId);
+
+    const created = await this.prisma.candidate_skills.create({
+      data: {
+        // FK via relation connect (NOT id_candidate)
+        candidates: { connect: { id: candidateId } },
+        name: dto.name ?? '',
+        tag: dto.tag ?? '',
+        certificate: dto.certificate ?? '',
+        level: dto.level ?? '',
+        issue_date: dto.issue_date ? new Date(dto.issue_date) : null,
+        is_verified: dto.is_verified ?? false,
+        status: dto.status ?? '',
+        created_at: new Date(),
+      } as any,
+      select: {
+        id: true,
+        name: true, tag: true, certificate: true, level: true,
+        issue_date: true, is_verified: true, status: true,
+        created_at: true, updated_at: true, deleted_at: true,
+      },
+    });
+
+    return { ...created, id: created.id.toString() };
+  }
+
+  async updateSkill(candidateId: string, skillId: string, dto: any /* , actorId?: string */) {
+    await this.ensureCandidate(candidateId);
+
+    // ensure belongs to candidate & not soft-deleted (relation filter)
+    const existing = await this.prisma.candidate_skills.findFirst({
+      where: {
+        id: BigInt(skillId),
+        deleted_at: null,
+        candidates: { is: { id: candidateId } },
+      },
+      select: { id: true },
+    });
+    if (!existing)
+      throw new NotFoundException({ code: 'CANDIDATE_SKILL_NOT_FOUND', details: { candidateId, skillId } });
+
+    const updated = await this.prisma.candidate_skills.update({
+      where: { id: BigInt(skillId) },
+      data: {
+        ...dto,
+        issue_date: dto.issue_date ? new Date(dto.issue_date) : undefined,
+        updated_at: new Date(),
+        // no updated_by column
+      } as any,
+      select: {
+        id: true,
+        name: true, tag: true, certificate: true, level: true,
+        issue_date: true, is_verified: true, status: true,
+        created_at: true, updated_at: true, deleted_at: true,
+      },
+    });
+
+    return { ...updated, id: updated.id.toString() };
+  }
+
+  async deleteSkill(candidateId: string, skillId: string /* , actorId?: string */) {
+    await this.ensureCandidate(candidateId);
+
+    const existing = await this.prisma.candidate_skills.findFirst({
+      where: {
+        id: BigInt(skillId),
+        deleted_at: null,
+        candidates: { is: { id: candidateId } },
+      },
+      select: { id: true },
+    });
+    if (!existing)
+      throw new NotFoundException({ code: 'CANDIDATE_SKILL_NOT_FOUND', details: { candidateId, skillId } });
+
+    await this.prisma.candidate_skills.update({
+      where: { id: BigInt(skillId) },
+      data: {
+        deleted_at: new Date(),
+        // no deleted_by column
+      } as any,
+      select: { id: true },
+    });
+
+    return { deleted: true, id: skillId };
+  }
+
+// ---------- Work Experiences ----------
+  async addWorkExp(candidateId: string, dto: any /* , actorId?: string */) {
+    await this.ensureCandidate(candidateId);
+
+    const created = await this.prisma.candidate_work_exps.create({
+      data: {
+        candidates: { connect: { id: candidateId } }, // connect instead of id_candidate
+        company: dto.company ?? '',
+        occupation: dto.occupation ?? '',
+        industry: dto.industry ?? '',
+        start_year: dto.start_year ?? '',
+        start_month: dto.start_month ?? '',
+        end_year: dto.end_year ?? '',
+        end_month: dto.end_month ?? '',
+        so: dto.so ?? '',
+        description: dto.description ?? '',
+        certificate: dto.certificate ?? '',
+        certificate_test: dto.certificate_test ?? '',
+        is_verified: dto.is_verified ?? false,
+        field: dto.field ?? '',
+        tag: dto.tag ?? '',
+        status: dto.status ?? '',
+        created_at: new Date(),
+      } as any,
+      select: {
+        id: true, company: true, occupation: true, industry: true,
+        start_year: true, start_month: true, end_year: true, end_month: true,
+        so: true, description: true, certificate: true, certificate_test: true,
+        is_verified: true, field: true, tag: true, status: true,
+        created_at: true, updated_at: true, deleted_at: true,
+      },
+    });
+
+    return { ...created, id: created.id.toString() };
+  }
+
+  async updateWorkExp(candidateId: string, workId: string, dto: any /* , actorId?: string */) {
+    await this.ensureCandidate(candidateId);
+
+    const existing = await this.prisma.candidate_work_exps.findFirst({
+      where: {
+        id: BigInt(workId),
+        deleted_at: null,
+        candidates: { is: { id: candidateId } },
+      },
+      select: { id: true },
+    });
+    if (!existing)
+      throw new NotFoundException({ code: 'CANDIDATE_WORK_EXP_NOT_FOUND', details: { candidateId, workId } });
+
+    const updated = await this.prisma.candidate_work_exps.update({
+      where: { id: BigInt(workId) },
+      data: {
+        ...dto,
+        updated_at: new Date(),
+      } as any,
+      select: {
+        id: true, company: true, occupation: true, industry: true,
+        start_year: true, start_month: true, end_year: true, end_month: true,
+        so: true, description: true, certificate: true, certificate_test: true,
+        is_verified: true, field: true, tag: true, status: true,
+        created_at: true, updated_at: true, deleted_at: true,
+      },
+    });
+
+    return { ...updated, id: updated.id.toString() };
+  }
+
+  async deleteWorkExp(candidateId: string, workId: string /* , actorId?: string */) {
+    await this.ensureCandidate(candidateId);
+
+    const existing = await this.prisma.candidate_work_exps.findFirst({
+      where: {
+        id: BigInt(workId),
+        deleted_at: null,
+        candidates: { is: { id: candidateId } },
+      },
+      select: { id: true },
+    });
+    if (!existing)
+      throw new NotFoundException({ code: 'CANDIDATE_WORK_EXP_NOT_FOUND', details: { candidateId, workId } });
+
+    await this.prisma.candidate_work_exps.update({
+      where: { id: BigInt(workId) },
+      data: {
+        deleted_at: new Date(),
+      } as any,
+      select: { id: true },
+    });
+
+    return { deleted: true, id: workId };
+  }
+
+
+  // ---------- Webinars (attach/detach) ----------
+  async attachWebinar(candidateId: string, webinarId: string, actorId?: string) {
+    await this.ensureCandidate(candidateId);
+
+    const link = await this.prisma.candidate_webinars.findFirst({
+      where: { id_candidate: candidateId, id_webinar: webinarId },
+      select: { id: true, deleted_at: true }
+    });
+
+    if (!link) {
+      const created = await this.prisma.candidate_webinars.create({
+        data: { id_candidate: candidateId, id_webinar: webinarId, created_at: new Date(), created_by: actorId ?? '' } as any,
+        select: { id: true, id_candidate: true, id_webinar: true, created_at: true, deleted_at: true }
+      });
+      return { ...created, id: created.id?.toString?.() ?? created.id };
+    }
+
+    if (link.deleted_at) {
+      const revived = await this.prisma.candidate_webinars.update({
+        where: { id: link.id },
+        data: { deleted_at: null, updated_at: new Date(), updated_by: actorId ?? '' } as any,
+        select: { id: true, id_candidate: true, id_webinar: true, updated_at: true, deleted_at: true }
+      });
+      return { ...revived, id: revived.id?.toString?.() ?? revived.id };
+    }
+
+    return { attached: true, id_candidate: candidateId, id_webinar: webinarId };
+  }
+
+  async detachWebinar(candidateId: string, webinarId: string, actorId?: string) {
+    await this.ensureCandidate(candidateId);
+
+    await this.prisma.candidate_webinars.updateMany({
+      where: { id_candidate: candidateId, id_webinar: webinarId, deleted_at: null },
+      data: { deleted_at: new Date(), deleted_by: actorId ?? '' } as any
+    });
+
+    return { detached: true, id_candidate: candidateId, id_webinar: webinarId };
+  }
+
+  // ---------- Vacancies (attach/detach) ----------
+  async attachVacancy(candidateId: string, vacancyId: string, actorId?: string) {
+    await this.ensureCandidate(candidateId);
+
+    const link = await this.prisma.candidate_vacancies.findFirst({
+      where: { id_candidate: candidateId, vacancy_id: vacancyId },
+      select: { id: true, deleted_at: true }
+    });
+
+    if (!link) {
+      const created = await this.prisma.candidate_vacancies.create({
+        data: { id_candidate: candidateId, vacancy_id: vacancyId, created_at: new Date(), created_by: actorId ?? '' } as any,
+        select: { id: true, id_candidate: true, vacancy_id: true, created_at: true, deleted_at: true }
+      });
+      return { ...created, id: created.id?.toString?.() ?? created.id };
+    }
+
+    if (link.deleted_at) {
+      const revived = await this.prisma.candidate_vacancies.update({
+        where: { id: link.id },
+        data: { deleted_at: null, updated_at: new Date(), updated_by: actorId ?? '' } as any,
+        select: { id: true, id_candidate: true, vacancy_id: true, updated_at: true, deleted_at: true }
+      });
+      return { ...revived, id: revived.id?.toString?.() ?? revived.id };
+    }
+
+    return { attached: true, id_candidate: candidateId, vacancy_id: vacancyId };
+  }
+
+  async detachVacancy(candidateId: string, vacancyId: string, actorId?: string) {
+    await this.ensureCandidate(candidateId);
+
+    await this.prisma.candidate_vacancies.updateMany({
+      where: { id_candidate: candidateId, vacancy_id: vacancyId, deleted_at: null },
+      data: { deleted_at: new Date(), deleted_by: actorId ?? '' } as any
+    });
+
+    return { detached: true, id_candidate: candidateId, vacancy_id: vacancyId };
+  }
+
+  // ---------- util ----------
+  private async ensureCandidate(id: string) {
+    const exists = await this.prisma.candidates.findFirst({
+      where: { id, deleted_at: null },
+      select: { id: true }
+    });
+    if (!exists) throw new NotFoundException({ code: 'CANDIDATE_NOT_FOUND', details: id });
   }
 }

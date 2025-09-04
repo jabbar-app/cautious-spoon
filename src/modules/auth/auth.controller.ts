@@ -15,6 +15,15 @@ export class AuthController {
   // ===== Super Admin =====
   @Post('superadmin/login')
   @HttpCode(HttpStatus.OK)
+  // async superLogin(
+  //   @Body() dto: LoginDto,
+  //   @Res({ passthrough: true }) res: Response,
+  //   @Ip() ip: string,
+  //   @Req() req: Request,
+  // ) {
+  //   const ua = req.get('user-agent') ?? '';
+  //   return this.auth.loginSuperadmin(dto.email, dto.password, { ip, ua, res });
+  // }
   async superLogin(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
@@ -30,15 +39,15 @@ export class AuthController {
     @Ip() ip: string,
   ) {
     const ua = req.get('user-agent') ?? '';
-    const oldToken = (req as any).cookies?.super_refresh_token ?? '';
-    return this.auth.refreshGeneric(oldToken, 'superadmin', { ip, ua, res, cookieName: 'super_refresh_token' });
+    const oldToken = (req as any).cookies?.superadmin_refresh_token ?? '';
+    return this.auth.refreshGeneric(oldToken, 'superadmin', { ip, ua, res, cookieName: 'superadmin_refresh_token' });
   }
 
   @Post('superadmin/logout')
   async superLogout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const oldToken = (req as any).cookies?.super_refresh_token ?? '';
-    await this.auth.logoutGeneric(oldToken);
-    res.clearCookie('super_refresh_token', { path: '/' });
+    const oldToken = (req as any).cookies?.superadmin_refresh_token ?? '';
+    await this.auth.logoutGeneric(oldToken, 'superadmin');
+    res.clearCookie('superadmin_refresh_token', { path: '/' });
     return { success: true };
   }
   // ===== Admin =====
@@ -128,7 +137,7 @@ export class AuthController {
   @Post('employer/logout')
   async employerLogout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const oldToken = (req as any).cookies?.employer_refresh_token ?? '';
-    await this.auth.logoutGeneric(oldToken);
+    await this.auth.logoutGeneric(oldToken, 'employer');
     res.clearCookie('employer_refresh_token', { path: '/' });
     return { success: true };
   }
@@ -209,7 +218,7 @@ export class AuthController {
   @Post('candidate/logout')
   async candidateLogout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const oldToken = (req as any).cookies?.candidate_refresh_token ?? '';
-    await this.auth.logoutGeneric(oldToken);
+    await this.auth.logoutGeneric(oldToken, 'candidate');
     res.clearCookie('candidate_refresh_token', { path: '/' });
     return { success: true };
   }

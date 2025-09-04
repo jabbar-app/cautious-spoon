@@ -13,6 +13,9 @@ import { SecurityModule } from './core/security';
 import { CoreJwtModule } from './core/jwt/jwt.module';
 import { CdnModule } from './modules/cdn/cdn.module';
 import { CandidatesModule } from './modules/candidates/candidates.module';
+import { ProgramsModule } from './modules/programs/programs.module';
+import { WebinarsModule } from './modules/webinars/webinars.module';
+
 @Module({
   imports: [
     ConfigModule,
@@ -26,7 +29,9 @@ import { CandidatesModule } from './modules/candidates/candidates.module';
     PermissionsModule,
     AdminsModule,
     CdnModule,
-    CandidatesModule
+    CandidatesModule,
+    ProgramsModule,
+    WebinarsModule
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },

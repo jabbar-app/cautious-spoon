@@ -8,6 +8,13 @@ import { ListCandidatesDto } from './dto/list-candidates.dto';
 import { PatchCandidateAdminsDto } from './dto/patch-candidate-admins.dto';
 import { JwtAdminGuard } from '../../common/guards/jwt-admin.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { CreateCandidateSkillDto } from './dto/skills/create-candidate-skill.dto';
+import { UpdateCandidateSkillDto } from './dto/skills/update-candidate-skill.dto';
+import { CreateCandidateWorkExpDto } from './dto/work-exps/create-candidate-work-exp.dto';
+import { UpdateCandidateWorkExpDto } from './dto/work-exps/update-candidate-work-exp.dto';
+import { AttachCandidateWebinarDto } from './dto/webinars/attach-candidate-webinar.dto';
+import { AttachCandidateVacancyDto } from './dto/vacancies/attach-candidate-vacancy.dto';
+import { AttachAdminsDto } from './dto/attach-admins.dto';
 
 @UseGuards(JwtAdminGuard, PermissionsGuard)
 @Controller('candidates')
@@ -16,10 +23,17 @@ export class CandidatesController {
 
   @Post('admins')
   @Permissions('candidate.admin.create')
-  async createByAdmin(@Body() dto: CreateCandidateAdminDto, @Req() req: any) {
+  attachAdmins(@Body() dto: AttachAdminsDto, @Req() req: any) {
     const actorId: string = req?.user?.id ?? req?.user?.sub ?? 'system';
-    const actorType: string | undefined = req?.user?.typ;
-    return this.service.createByAdmin(dto, actorId, actorType);
+    return this.service.setAdminOwners(dto.id_candidate, dto.attach ?? [], dto.detach ?? [], actorId);
+  }
+
+  @Post()
+  @Permissions('candidate.create')
+  create(@Body() dto: any, @Req() req: any) {
+    const actorId: string = req?.user?.id ?? req?.user?.sub ?? 'system';
+    const actorType: string = req?.user?.typ ?? '';
+    return this.service.createCandidate(dto, actorId, actorType);
   }
 
   @Get()
@@ -30,8 +44,8 @@ export class CandidatesController {
 
   @Get(':id')
   @Permissions('candidate.details')
-  async details(@Param() params: GetCandidateParamsDto) {
-    return this.service.details(params.id);
+    async detailsExpanded(@Param('id') id: string) {
+    return this.service.detailsExpanded(id);
   }
 
   @Put(':id')
@@ -57,5 +71,89 @@ export class CandidatesController {
   ) {
     const actorId: string = req?.user?.id ?? req?.user?.sub ?? 'system';
     return this.service.setAdminOwners(params.id, dto.attach ?? [], dto.detach ?? [], actorId);
+  }
+
+  // -------- Skills --------
+  @Post(':id/skills')
+  @Permissions('candidate.skill.create')
+  createSkill(@Param('id') id: string, @Body() dto: CreateCandidateSkillDto, @Req() req: any) {
+    // const actorId: string = req?.user?.id ?? req?.user?.sub ?? 'system';
+    return this.service.addSkill(id, dto);
+  }
+
+  @Put(':id/skills/:skillId')
+  @Permissions('candidate.skill.update')
+  updateSkill(
+    @Param('id') id: string,
+    @Param('skillId') skillId: string,
+    @Body() dto: UpdateCandidateSkillDto,
+    @Req() req: any,
+  ) {
+    // const actorId: string = req?.user?.id ?? req?.user?.sub ?? 'system';
+    return this.service.updateSkill(id, skillId, dto);
+  }
+
+  @Delete(':id/skills/:skillId')
+  @Permissions('candidate.skill.delete')
+  deleteSkill(@Param('id') id: string, @Param('skillId') skillId: string, @Req() req: any) {
+    const actorId: string = req?.user?.id ?? req?.user?.sub ?? 'system';
+    return this.service.deleteSkill(id, skillId);
+  }
+
+  // -------- Work Experiences --------
+  @Post(':id/work-exps')
+  @Permissions('candidate.work.create')
+  createWorkExp(@Param('id') id: string, @Body() dto: CreateCandidateWorkExpDto, @Req() req: any) {
+    // const actorId: string = req?.user?.id ?? req?.user?.sub ?? 'system';
+    return this.service.addWorkExp(id, dto);
+  }
+
+  @Put(':id/work-exps/:workId')
+  @Permissions('candidate.work.update')
+  updateWorkExp(
+    @Param('id') id: string,
+    @Param('workId') workId: string,
+    @Body() dto: UpdateCandidateWorkExpDto,
+    @Req() req: any,
+  ) {
+    // const actorId: string = req?.user?.id ?? req?.user?.sub ?? 'system';
+    return this.service.updateWorkExp(id, workId, dto);
+  }
+
+  @Delete(':id/work-exps/:workId')
+  @Permissions('candidate.work.delete')
+  deleteWorkExp(@Param('id') id: string, @Param('workId') workId: string, @Req() req: any) {
+    // const actorId: string = req?.user?.id ?? req?.user?.sub ?? 'system';
+    return this.service.deleteWorkExp(id, workId);
+  }
+
+  // -------- Webinars (attach/detach) --------
+  @Post(':id/webinars')
+  @Permissions('candidate.webinars.create')
+  attachWebinar(@Param('id') id: string, @Body() dto: AttachCandidateWebinarDto, @Req() req: any) {
+    const actorId: string = req?.user?.id ?? req?.user?.sub ?? 'system';
+    return this.service.attachWebinar(id, dto.webinarId, actorId);
+  }
+
+  @Delete(':id/webinars/:webinarId')
+  @Permissions('candidate.webinars.delete')
+  detachWebinar(@Param('id') id: string, @Param('webinarId') webinarId: string, @Req() req: any) {
+    const actorId: string = req?.user?.id ?? req?.user?.sub ?? 'system';
+    return this.service.detachWebinar(id, webinarId, actorId);
+  }
+
+  // -------- Vacancies (attach/detach) --------
+  @Post(':id/vacancies')
+  @Permissions('candidate.vacancies.create')
+  attachVacancy(@Param('id') id: string, @Body() dto: AttachCandidateVacancyDto, @Req() req: any) {
+    const actorId: string = req?.user?.id ?? req?.user?.sub ?? 'system';
+    return this.service.attachVacancy(id, dto.vacancyId, actorId);
+  }
+
+  @Delete(':id/vacancies/:vacancyId')
+  @Permissions('candidate.vacancies.delete')
+  detachVacancy(@Param('id') id: string, @Param('vacancyId') vacancyId: string, @Req() req: any) {
+    const actorId: string = req?.user?.id ?? req?.user?.sub ?? 'system';
+    return this.service.detachVacancy(id, vacancyId, actorId);
   }
 }

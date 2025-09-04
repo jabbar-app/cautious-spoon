@@ -273,6 +273,7 @@ model candidate_webinars {
   status       String?    @default("register") @db.VarChar(50)
   created_at   DateTime?  @db.Timestamptz(6)
   updated_at   DateTime?  @db.Timestamptz(6)
+  deleted_at   DateTime?  @db.Timestamptz(6)
   candidates   candidates @relation(fields: [id_candidate], references: [id], onDelete: Cascade, map: "fk_candidates_candidate_webinar")
   webinars     webinars   @relation(fields: [id_webinar], references: [id], onDelete: Cascade, map: "fk_webinars_candidate_webinar")
 
@@ -705,12 +706,17 @@ model programs {
   created_by         String?              @db.VarChar(225)
   created_at         DateTime?            @db.Timestamptz(6)
   updated_at         DateTime?            @db.Timestamptz(6)
+  updated_by         String?              @db.VarChar(225)
   is_active          Boolean?             @default(true)
   is_visible         Boolean?             @default(true)
   formulir           String[]             @default([])
   test_schedules     Json[]
+  deleted_at         DateTime?            @db.Timestamptz(6)
+  deleted_by         String?              @db.VarChar(225)
   candidate_programs candidate_programs[]
   webinars           webinars[]
+
+  @@index([deleted_at], map: "idx_programs_deleted_at")
 }
 
 model provinces {
@@ -865,11 +871,16 @@ model webinars {
   absen_valid_date            DateTime?                     @db.Timestamptz(6)
   created_at                  DateTime?                     @db.Timestamptz(6)
   updated_at                  DateTime?                     @db.Timestamptz(6)
+  updated_by                  String?                       @db.VarChar(225)
   is_active                   Boolean?                      @default(true)
   is_generated                Boolean?                      @default(false)
+  deleted_at                  DateTime?                     @db.Timestamptz(6)
+  deleted_by                  String?                       @db.VarChar(225)
   candidate_bookmark_webinars candidate_bookmark_webinars[]
   candidate_webinars          candidate_webinars[]
   programs                    programs?                     @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "fk_programs_webinars")
+
+  @@index([deleted_at], map: "idx_webinars_deleted_at")
 }
 
 model admin_refresh_tokens {

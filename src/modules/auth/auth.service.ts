@@ -421,18 +421,51 @@ export class AuthService {
   }
 
   // ===== Superadmin / Employer / Candidate (JWT refresh + blacklist) =====
-  async loginSuperadmin(email: string, password: string, ctx: { res: any }) {
-    const s = await this.prisma.superadmins.findFirst({ where: { email } });
-    if (!s) throw new UnauthorizedException('INVALID_CREDENTIALS');
+  // async loginSuperadmin(email: string, password: string, ctx: { ip: string; ua: string; res: any }) {
 
-    const ok = await bcrypt.compare(password, s.password ?? '');
+  //   const admin = await this.prisma.superadmins.findFirst({
+  //     where: { email },
+  //   });
+
+  //   // Do not reveal which factor failed
+  //   if (!admin || !admin.password) {
+  //     throw new UnauthorizedException('INVALID_CREDENTIALS');
+  //   }
+
+  //   // Safe bcrypt compare
+  //   const ok = await bcrypt.compare(password, admin.password);
+  //   if (!ok) {
+  //     throw new UnauthorizedException('INVALID_CREDENTIALS');
+  //   }
+
+  //   const accessToken = await this.signAccess(admin.id, 'admin');
+
+  //   // refresh token cookie
+  //   const refreshPlain = randomHex(64);
+  //   const token_hash = await bcrypt.hash(refreshPlain, rounds());
+  //   const now = new Date();
+  //   const expires_at = new Date(now.getTime() + parseTtlMs(process.env.JWT_REFRESH_TTL ?? '30d'));
+
+
+  //   setCookie(ctx.res, 'refresh_token', refreshPlain, expires_at);
+
+  //   const profile = await this.buildAdminProfile(admin.id);
+  //   return { accessToken, user: profile };
+  // }
+
+  async loginSuperadmin(email: string, password: string, ctx: { res: any }) {
+    const e = await this.prisma.superadmins.findFirst({ where: { email } });
+    if (!e) throw new UnauthorizedException('INVALID_CREDENTIALS');
+    const ok = await bcrypt.compare(password, e.password);
     if (!ok) throw new UnauthorizedException('INVALID_CREDENTIALS');
 
-    const accessToken = await this.signAccess(s.id, 'superadmin');
-    const { refreshPlain, expires_at } = await this.signRefreshJwt(s.id, 'superadmin');
-    setCookie(ctx.res, 'super_refresh_token', refreshPlain, expires_at);
+    const accessToken = await this.signAccess(e.id, 'superadmin');
+    const { refreshPlain, expires_at } = await this.signRefreshJwt(e.id, 'superadmin');
 
-    return { accessToken, user: { id: s.id, email: s.email ?? '', created_at: s.created_at ?? null } };
+    console.log(refreshPlain)
+    setCookie(ctx.res, 'superadmin_refresh_token', refreshPlain, expires_at);
+
+    return { accessToken, user: { id: e.id, email: e.email } };
   }
 
   async loginEmployer(email: string, password: string, ctx: { res: any }) {
@@ -478,7 +511,7 @@ export class AuthService {
     if (decoded.typ !== typ) throw new ForbiddenException('INVALID_REFRESH_TYPE');
 
     // rotate: blacklist old, issue new
-    await this.blacklist(oldRefresh);
+    await this.blacklist(oldRefresh, typ);
 
     const accessToken = await this.signAccess(decoded.sub, typ);
     const { refreshPlain, expires_at } = await this.signRefreshJwt(decoded.sub, typ);
@@ -507,9 +540,9 @@ export class AuthService {
     };
   }
 
-  async logoutGeneric(oldRefresh: string) {
+  async logoutGeneric(oldRefresh: string, typ: string) {
     if (!oldRefresh) return;
-    await this.blacklist(oldRefresh);
+    await this.blacklist(oldRefresh, typ);
   }
 
   // ===== Forgot + Email Verify =====
@@ -557,10 +590,10 @@ export class AuthService {
     return false;
   }
 
-  private async blacklist(plain: string) {
+  private async blacklist(plain: string, typ:string) {
     const hashed = await bcrypt.hash(plain, rounds());
     await this.prisma.token_blacklists.create({
-      data: { refresh_token: hashed, created_at: new Date(), created_by: 'auth' },
+      data: { refresh_token: hashed, created_at: new Date(), created_by: typ },
     });
   }
 
