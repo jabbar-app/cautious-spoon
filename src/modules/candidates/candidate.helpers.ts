@@ -134,7 +134,8 @@ export function skillHasLevel(skill: any, levels: string[]): boolean {
 export const includeRelations = {
   candidate_work_exps: { where: { deleted_at: null } },
   candidate_skills: { where: { deleted_at: null } },
-  // candidate_certificates: { where: { deleted_at: null } }, // add when the model exists
+  candidate_webinars: {where: {deleted_at: null}},
+  candidate_programs: {where: {deleted_at: null}},
   admin_candidates: {
     where: { deleted_at: null },
     select: {

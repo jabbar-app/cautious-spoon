@@ -83,7 +83,7 @@ export const PERMISSIONS: string[] = [
   "program.get",
   "program.participants",
   "programs.update",
-  "webinar.assign",
+  "webinar.participants.assign",
   "webinar.broadcast",
   "webinar.code",
   "webinar.create",

@@ -1,0 +1,383 @@
+model superadmins {
+    id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    email                     String?                     @default("") @db.VarChar(50)
+    password                  String?                     @default("")
+    created_at                DateTime?                   @db.Timestamptz(6)
+    updated_at                DateTime?                   @db.Timestamptz(6)
+    superadmin_refresh_tokens superadmin_refresh_tokens[]
+
+    @@schema("core")
+}
+
+model superadmin_refresh_tokens {
+    id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    admin_id    String      @db.Uuid
+    token_hash  String      @db.VarChar(255)
+    issued_at   DateTime    @db.Timestamptz(6)
+    expires_at  DateTime    @db.Timestamptz(6)
+    revoked_at  DateTime?   @db.Timestamptz(6)
+    ip          String?     @db.VarChar(100)
+    user_agent  String?     @db.VarChar(255)
+    created_at  DateTime    @default(now()) @db.Timestamptz(6)
+    superadmins superadmins @relation(fields: [admin_id], references: [id], onDelete: Cascade)
+
+    @@index([admin_id], map: "idx_superadmin_refresh_tokens_admin_id")
+    @@map("superadmin_refresh_tokens")
+    @@schema("core")
+}
+
+model token_blacklists {
+    id            BigInt    @id @default(autoincrement())
+    refresh_token String?   @default("")
+    created_by    String?   @default("") @db.VarChar(50)
+    created_at    DateTime? @db.Timestamptz(6)
+    updated_at    DateTime? @db.Timestamptz(6)
+
+    @@schema("core")
+}
+
+model admins {
+    id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    email                String                 @unique(map: "uni_admins_email") @db.VarChar(225)
+    password             String                 @db.VarChar(225)
+    name                 String?                @default("") @db.VarChar(225)
+    phone                String?                @default("") @db.VarChar(225)
+    photo                String?                @default("") @db.VarChar(225)
+    last_login           DateTime?              @db.Timestamptz(6)
+    created_at           DateTime?              @db.Timestamptz(6)
+    updated_at           DateTime?              @db.Timestamptz(6)
+    created_by           String?                @default("") @db.VarChar(50)
+    updated_by           String?                @default("") @db.VarChar(50)
+    deleted_at           DateTime?              @db.Timestamptz(6)
+    deleted_by           String?                @default("") @db.VarChar(50)
+    admin_roles          admin_roles[]
+    admin_refresh_tokens admin_refresh_tokens[]
+    admin_candidate      admin_candidate[]
+
+    @@schema("core")
+}
+
+model permissions {
+    id               BigInt             @id @default(autoincrement())
+    title            String?            @unique(map: "uni_permissions_title") @default("")
+    created_at       DateTime?          @db.Timestamptz(6)
+    created_by       String?            @default("") @db.VarChar(50)
+    updated_at       DateTime?          @db.Timestamptz(6)
+    updated_by       String?            @default("") @db.VarChar(50)
+    deleted_at       DateTime?          @db.Timestamptz(6)
+    deleted_by       String?            @default("") @db.VarChar(50)
+    dynamic_title    String?            @default("")
+    description      String?            @default("")
+    role_permissions role_permissions[]
+
+    @@schema("core")
+}
+
+model roles {
+    id               BigInt             @id @default(autoincrement())
+    title            String?            @unique(map: "uni_roles_title") @default("")
+    created_at       DateTime?          @db.Timestamptz(6)
+    created_by       String?            @default("") @db.VarChar(50)
+    updated_at       DateTime?          @db.Timestamptz(6)
+    updated_by       String?            @default("") @db.VarChar(50)
+    deleted_at       DateTime?          @db.Timestamptz(6)
+    deleted_by       String?            @default("") @db.VarChar(50)
+    description      String?            @default("")
+    admin_roles      admin_roles[]
+    role_permissions role_permissions[]
+
+    @@schema("core")
+}
+
+model role_permissions {
+    id_role       BigInt
+    id_permission BigInt
+    created_at    DateTime?   @db.Timestamptz(6)
+    created_by    String?     @default("") @db.VarChar(50)
+    updated_at    DateTime?   @db.Timestamptz(6)
+    updated_by    String?     @default("") @db.VarChar(50)
+    deleted_at    DateTime?   @db.Timestamptz(6)
+    deleted_by    String?     @default("") @db.VarChar(50)
+    permissions   permissions @relation(fields: [id_permission], references: [id], onDelete: Cascade)
+    roles         roles       @relation(fields: [id_role], references: [id], onDelete: Cascade)
+
+    @@id([id_role, id_permission])
+    @@index([id_permission], map: "idx_role_permissions_id_permission")
+    @@schema("core")
+}
+
+model admin_roles {
+    id_admin   String    @db.Uuid
+    id_role    BigInt
+    created_at DateTime? @db.Timestamptz(6)
+    created_by String?   @default("") @db.VarChar(50)
+    updated_at DateTime? @db.Timestamptz(6)
+    updated_by String?   @default("") @db.VarChar(50)
+    deleted_at DateTime? @db.Timestamptz(6)
+    deleted_by String?   @default("") @db.VarChar(50)
+    admins     admins    @relation(fields: [id_admin], references: [id], onDelete: Cascade)
+    roles      roles     @relation(fields: [id_role], references: [id], onDelete: Cascade)
+
+    @@id([id_admin, id_role]) // composite PK
+    @@index([id_role], map: "idx_admin_roles_id_role")
+    @@schema("core")
+}
+
+model admin_refresh_tokens {
+    id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    admin_id   String    @db.Uuid
+    token_hash String    @db.VarChar(255)
+    issued_at  DateTime  @db.Timestamptz(6)
+    expires_at DateTime  @db.Timestamptz(6)
+    revoked_at DateTime? @db.Timestamptz(6)
+    ip         String?   @db.VarChar(100)
+    user_agent String?   @db.VarChar(255)
+    created_at DateTime  @default(now()) @db.Timestamptz(6)
+    admins     admins    @relation(fields: [admin_id], references: [id], onDelete: Cascade)
+
+    @@index([admin_id], map: "idx_admin_refresh_tokens_admin_id")
+    @@map("admin_refresh_tokens")
+    @@schema("core")
+}
+
+model admin_candidate {
+    id           BigInt     @id @default(autoincrement())
+    id_admin     String     @db.Uuid
+    id_candidate String     @db.Uuid
+    created_at   DateTime?  @db.Timestamptz(6)
+    created_by   String?    @default("") @db.VarChar(50)
+    updated_at   DateTime?  @db.Timestamptz(6)
+    updated_by   String?    @default("") @db.VarChar(50)
+    deleted_at   DateTime?  @db.Timestamptz(6)
+    deleted_by   String?    @default("") @db.VarChar(50)
+    admins       admins     @relation(fields: [id_admin], references: [id], onDelete: Cascade)
+    candidates   candidates @relation(fields: [id_candidate], references: [id], onDelete: Cascade)
+
+    @@schema("core")
+}
+
+model candidates {
+    id                            String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    email                         String                          @unique(map: "uni_candidates_email") @db.VarChar(225)
+    password                      String                          @db.VarChar(225)
+    onboarding                    Boolean?                        @default(false)
+    verified                      Json?                           @default("{}")
+    talent_id                     String?                         @default("") @db.VarChar(100)
+    name                          String?                         @default("") @db.VarChar(225)
+    sex                           String?                         @default("") @db.VarChar(10)
+    address_info                  Json?                           @default("{}")
+    birth_info                    Json?                           @default("{}")
+    document                      Json?                           @default("{}")
+    education                     Json?                           @default("{}")
+    phone                         String?                         @default("") @db.VarChar(50)
+    marital_status                String?                         @default("") @db.VarChar(225)
+    religion                      String?                         @default("") @db.VarChar(225)
+    email_verified                Boolean?                        @default(false)
+    email_verified_at             DateTime?                       @db.Timestamptz(6)
+    last_login                    DateTime?                       @db.Timestamptz(6)
+    status                        Int?                            @default(1)
+    created_at                    DateTime?                       @db.Timestamptz(6)
+    updated_at                    DateTime?                       @db.Timestamptz(6)
+    deleted_at                    DateTime?                       @db.Timestamptz(6)
+    password_updated_at           DateTime?                       @db.Timestamptz(6)
+    updated_by                    String?                         @default("") @db.VarChar(50)
+    deleted_by                    String?                         @default("") @db.VarChar(50)
+    created_by                    String?                         @db.VarChar(225)
+    candidate_bookmark_webinars   candidate_bookmark_webinars[]
+    candidate_programs            candidate_programs[]
+    candidate_skills              candidate_skills[]
+    candidate_webinars            candidate_webinars[]
+    candidate_work_exps           candidate_work_exps[]
+    candidate_refresh_tokens      candidate_refresh_tokens[]
+    program_interview_enrollments program_interview_enrollments[]
+    candidate_screenings          candidate_screenings[]
+    admin_candidate               admin_candidate[]
+
+    @@schema("core")
+}
+
+model candidate_refresh_tokens {
+    id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    candidate_id String     @db.Uuid
+    token_hash   String     @db.VarChar(255)
+    issued_at    DateTime   @db.Timestamptz(6)
+    expires_at   DateTime   @db.Timestamptz(6)
+    revoked_at   DateTime?  @db.Timestamptz(6)
+    ip           String?    @db.VarChar(100)
+    user_agent   String?    @db.VarChar(255)
+    created_at   DateTime   @default(now()) @db.Timestamptz(6)
+    candidates   candidates @relation(fields: [candidate_id], references: [id], onDelete: Cascade)
+
+    @@index([candidate_id])
+    @@map("candidate_refresh_tokens")
+    @@schema("core")
+}
+
+model candidate_skills {
+    id                   BigInt      @id @default(autoincrement())
+    id_candidate         String?     @db.Uuid
+    name                 String?     @default("") @db.VarChar(225)
+    tag                  String?     @default("") @db.VarChar(50)
+    certificate          String?     @default("")
+    level                String?     @default("") @db.VarChar(100)
+    issue_date           DateTime?   @db.Timestamptz(6)
+    is_verified          Boolean?    @default(false)
+    verification_date    DateTime?   @db.Timestamptz(6)
+    id_admin_verificator String?     @default("") @db.VarChar(50)
+    status               String?     @db.VarChar(5)
+    created_at           DateTime?   @db.Timestamptz(6)
+    updated_at           DateTime?   @db.Timestamptz(6)
+    deleted_at           DateTime?   @db.Timestamptz(6)
+    candidates           candidates? @relation(fields: [id_candidate], references: [id], onDelete: Cascade, map: "fk_candidates_candidate_skill")
+
+    @@schema("core")
+}
+
+model candidate_work_exps {
+    id               BigInt       @id @default(autoincrement())
+    id_candidate     String?      @db.Uuid
+    company          String?      @default("") @db.VarChar(255)
+    occupation       String?      @db.Uuid
+    industry         String?      @db.Uuid
+    start_year       String?      @default("") @db.VarChar(50)
+    start_month      String?      @default("") @db.VarChar(50)
+    end_year         String?      @default("") @db.VarChar(50)
+    end_month        String?      @default("") @db.VarChar(50)
+    so               String?      @default("") @db.VarChar(255)
+    description      String?      @default("")
+    certificate      String?      @default("")
+    certificate_test String?      @default("")
+    is_verified      Boolean?     @default(false)
+    field            String?      @default("")
+    tag              String?      @default("") @db.VarChar(50)
+    status           String?      @db.VarChar(5)
+    created_at       DateTime?    @db.Timestamptz(6)
+    updated_at       DateTime?    @db.Timestamptz(6)
+    deleted_at       DateTime?    @db.Timestamptz(6)
+    occupations      occupations? @relation(fields: [occupation], references: [id], onDelete: Cascade)
+    industries       industries?  @relation(fields: [industry], references: [id], onDelete: Cascade)
+    candidates       candidates?  @relation(fields: [id_candidate], references: [id], onDelete: Cascade)
+
+    @@schema("core")
+}
+
+//========DATASET============//
+model industries {
+    id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    industry_ind        String?
+    industry_jpn        String?
+    industry_eng        String?
+    tag                 String?               @db.VarChar(10)
+    created_at          DateTime?             @db.Timestamptz(6)
+    updated_at          DateTime?             @db.Timestamptz(6)
+    deleted_at          DateTime?             @db.Timestamptz(6)
+    occupations         occupations[]
+    candidate_work_exps candidate_work_exps[]
+
+    @@schema("core")
+}
+
+model occupations {
+    id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    id_job_indsutry     String?               @db.Uuid
+    occupation_ind      String?
+    occupation_jpn      String?
+    occupation_eng      String?
+    tag                 String?               @db.VarChar(10)
+    created_at          DateTime?             @db.Timestamptz(6)
+    updated_at          DateTime?             @db.Timestamptz(6)
+    deleted_at          DateTime?             @db.Timestamptz(6)
+    job_industries      industries?           @relation(fields: [id_job_indsutry], references: [id], onDelete: Cascade)
+    candidate_work_exps candidate_work_exps[]
+
+    @@schema("core")
+}
+
+model skills {
+    id         BigInt    @id @default(autoincrement())
+    skill_ind  String?   @default("") @db.VarChar(225)
+    skill_eng  String?   @default("") @db.VarChar(225)
+    skill_jpn  String?   @default("") @db.VarChar(225)
+    created_at DateTime? @db.Timestamptz(6)
+    created_by String?   @default("") @db.VarChar(50)
+    updated_at DateTime? @db.Timestamptz(6)
+    updated_by String?   @default("") @db.VarChar(50)
+
+    @@schema("core")
+}
+
+model prefectures {
+    id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    jp         String?   @default("") @db.VarChar(50)
+    idn        String?   @default("") @db.VarChar(50)
+    eng        String?   @default("") @db.VarChar(50)
+    created_at DateTime? @db.Timestamptz(6)
+    updated_at DateTime? @db.Timestamptz(6)
+
+    @@schema("core")
+}
+
+model locations {
+    id      BigInt  @id @default(autoincrement())
+    city    String? @default("") @db.VarChar(225)
+    country String? @default("") @db.VarChar(225)
+
+    @@schema("core")
+}
+
+model provinces {
+    id       BigInt   @id @default(autoincrement())
+    province String   @db.VarChar(100)
+    capital  String   @db.VarChar(100)
+    p_bsni   String   @db.VarChar(5)
+    cities   cities[]
+
+    @@index([capital], map: "idx_provinces_capital")
+    @@index([id], map: "idx_provinces_id")
+    @@index([p_bsni], map: "idx_provinces_p_bsni")
+    @@index([province], map: "idx_provinces_province")
+    @@schema("core")
+}
+
+model cities {
+    id          BigInt      @id @default(autoincrement())
+    province_id BigInt
+    city        String      @db.VarChar(100)
+    capital     String      @db.VarChar(100)
+    k_bsni      String      @db.VarChar(3)
+    provinces   provinces   @relation(fields: [province_id], references: [id], onDelete: Cascade, map: "fk_provinces_cities")
+    districts   districts[]
+
+    @@index([city], map: "idx_cities_city")
+    @@index([id], map: "idx_cities_id")
+    @@index([k_bsni], map: "idx_cities_k_bsni")
+    @@index([province_id], map: "idx_cities_province_id")
+    @@schema("core")
+}
+
+model districts {
+    id            BigInt          @id @default(autoincrement())
+    city_id       BigInt
+    district      String          @db.VarChar(100)
+    cities        cities          @relation(fields: [city_id], references: [id], onDelete: Cascade, map: "fk_cities_districts")
+    sub_districts sub_districts[]
+
+    @@index([city_id], map: "idx_districts_city_id")
+    @@index([district], map: "idx_districts_district")
+    @@index([id], map: "idx_districts_id")
+    @@schema("core")
+}
+
+model sub_districts {
+    id           BigInt    @id @default(autoincrement())
+    district_id  BigInt
+    sub_district String    @db.VarChar(100)
+    postal_code  String    @db.VarChar(5)
+    districts    districts @relation(fields: [district_id], references: [id], onDelete: Cascade, map: "fk_districts_sub_districts")
+
+    @@index([district_id], map: "idx_sub_districts_district_id")
+    @@index([id], map: "idx_sub_districts_id")
+    @@index([postal_code], map: "idx_sub_districts_postal_code")
+    @@index([sub_district], map: "idx_sub_districts_sub_district")
+    @@schema("core")
+}

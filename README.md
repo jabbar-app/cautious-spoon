@@ -31,15 +31,51 @@
 $ npm install
 ```
 
-## Migration init
+## Migration Runbook
+
 ```bash
-> npx prisma migrate diff --from-empty --to-url "$env:DATABASE_URL" --script --output prisma\migrations\000_init\migration.sql
-> npx prisma migrate resolve --applied 000_init
-> npx prisma migrate status
-> npx prisma migrate deploy
-> npx prisma generate
-> npm run seed:rbac
+# IMPORTANT !!! import db production to new database with schema 'legacy'
+$ npx prisma format
+$ npx prisma migrate deploy
+$ npx prisma migrate resolve --applied 000_init
+$ npx prisma migrate resolve --applied 001_load_legacy_data
+$ npm run seed:rbac
 ```
+
+## Prisma Rubook app
+
+```
+# Validate
+npx prisma validate --schema prisma/app
+
+# Generate the client (output was set to prisma/app/generated/app)
+npx prisma generate --schema prisma/app
+
+# Dev migration workflow
+npx prisma migrate dev --schema prisma/app
+
+# Deploy migrations in CI
+npx prisma migrate deploy --schema prisma/app
+
+# Studio (optional)
+npx prisma studio --schema prisma/app
+
+```
+
+## Prisma Rubook Legacy Data
+
+```
+# Pull from DB (overwrites prisma/legacy/schema.prisma)
+npx prisma db pull --schema prisma/legacy
+
+# Generate the legacy client (output was set to prisma/legacy/generated/legacy)
+npx prisma generate --schema prisma/legacy
+
+# Validate (sanity)
+npx prisma validate --schema prisma/legacy
+
+```
+
 ## Compile and run the project
 
 ```bash

@@ -15,32 +15,17 @@ export class AuthController {
   // ===== Super Admin =====
   @Post('superadmin/login')
   @HttpCode(HttpStatus.OK)
-  // async superLogin(
-  //   @Body() dto: LoginDto,
-  //   @Res({ passthrough: true }) res: Response,
-  //   @Ip() ip: string,
-  //   @Req() req: Request,
-  // ) {
-  //   const ua = req.get('user-agent') ?? '';
-  //   return this.auth.loginSuperadmin(dto.email, dto.password, { ip, ua, res });
-  // }
-  async superLogin(
-    @Body() dto: LoginDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    return this.auth.loginSuperadmin(dto.email, dto.password, { res });
+  async superAdminLogin(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response, @Ip() ip: string, @Req() req: Request,) {
+    const ua = req.get('user-agent') ?? '';
+    return this.auth.loginSuperadmin(dto.email, dto.password, { ip, ua, res });
   }
 
   @Post('superadmin/refresh')
   @HttpCode(HttpStatus.OK)
-  async superRefresh(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-    @Ip() ip: string,
-  ) {
+  async superAdminRefresh(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Ip() ip: string) {
     const ua = req.get('user-agent') ?? '';
-    const oldToken = (req as any).cookies?.superadmin_refresh_token ?? '';
-    return this.auth.refreshGeneric(oldToken, 'superadmin', { ip, ua, res, cookieName: 'superadmin_refresh_token' });
+    const oldToken = (req as any).cookies?.refresh_token ?? '';
+    return this.auth.refreshSuperadmin(oldToken, { ip, ua, res });
   }
 
   @Post('superadmin/logout')
@@ -53,23 +38,14 @@ export class AuthController {
   // ===== Admin =====
   @Post('admin/login')
   @HttpCode(HttpStatus.OK)
-  async adminLogin(
-    @Body() dto: LoginDto,
-    @Res({ passthrough: true }) res: Response,
-    @Ip() ip: string,
-    @Req() req: Request,
-  ) {
+  async adminLogin(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response, @Ip() ip: string, @Req() req: Request,) {
     const ua = req.get('user-agent') ?? '';
     return this.auth.loginAdmin(dto.email, dto.password, { ip, ua, res });
   }
 
   @Post('admin/refresh')
   @HttpCode(HttpStatus.OK)
-  async adminRefresh(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-    @Ip() ip: string,
-  ) {
+  async adminRefresh(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Ip() ip: string,) {
     const ua = req.get('user-agent') ?? '';
     const oldToken = (req as any).cookies?.refresh_token ?? '';
     return this.auth.refreshAdmin(oldToken, { ip, ua, res });
@@ -118,20 +94,19 @@ export class AuthController {
   async employerLogin(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
+    @Ip() ip: string,
+    @Req() req: Request,
   ) {
-    return this.auth.loginEmployer(dto.email, dto.password, { res });
+    const ua = req.get('user-agent') ?? '';
+    return this.auth.loginEmployer(dto.email, dto.password, { ip, ua, res });
   }
 
   @Post('employer/refresh')
   @HttpCode(HttpStatus.OK)
-  async employerRefresh(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-    @Ip() ip: string,
-  ) {
+  async EmployerRefresh(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Ip() ip: string,) {
     const ua = req.get('user-agent') ?? '';
-    const oldToken = (req as any).cookies?.employer_refresh_token ?? '';
-    return this.auth.refreshGeneric(oldToken, 'employer', { ip, ua, res, cookieName: 'employer_refresh_token' });
+    const oldToken = (req as any).cookies?.refresh_token ?? '';
+    return this.auth.refreshEmployer(oldToken, { ip, ua, res });
   }
 
   @Post('employer/logout')
@@ -196,11 +171,15 @@ export class AuthController {
   }
 
   @Post('candidate/login')
+  @HttpCode(HttpStatus.OK)
   async candidateLogin(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
+    @Ip() ip: string,
+    @Req() req: Request,
   ) {
-    return this.auth.loginCandidate(dto.email, dto.password, { res });
+    const ua = req.get('user-agent') ?? '';
+    return this.auth.loginCandidate(dto.email, dto.password, { ip, ua, res });
   }
 
   @Post('candidate/refresh')
@@ -211,8 +190,8 @@ export class AuthController {
     @Ip() ip: string,
   ) {
     const ua = req.get('user-agent') ?? '';
-    const oldToken = (req as any).cookies?.candidate_refresh_token ?? '';
-    return this.auth.refreshGeneric(oldToken, 'candidate', { ip, ua, res, cookieName: 'candidate_refresh_token' });
+    const oldToken = (req as any).cookies?.refresh_token ?? '';
+    return this.auth.refreshCandidate(oldToken, { ip, ua, res });
   }
 
   @Post('candidate/logout')

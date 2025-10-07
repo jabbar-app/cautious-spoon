@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
 import { randomUUID } from 'crypto';
 import { addHours } from 'date-fns';
@@ -11,7 +11,6 @@ export class WebinarsService {
 
   private select = {
     id: true,
-    id_program: true,
     title: true,
     registration_date: true,
     webinar_date: true,
@@ -26,8 +25,6 @@ export class WebinarsService {
     status: true,
     is_visible: true,
     is_active: true,
-    absen_code: true,
-    absen_valid_date: true,
     created_at: true,
     updated_at: true,
     deleted_at: true
@@ -45,7 +42,6 @@ export class WebinarsService {
     const row = await this.prisma.webinars.create({
       data: {
         id,
-        id_program: input.id_program ?? null, // <-- optional
         title: input.title ?? '',
         registration_date: input.registration_date ?? null,
         webinar_date: input.webinar_date ?? null,
@@ -74,11 +70,9 @@ export class WebinarsService {
     const perPage = Math.min(100, Math.max(1, Number(query.perPage ?? 20)));
     const search = (query.search ?? '').trim();
     const all = !!query.all;
-    const programId = query.programId?.trim();
 
     const where: Prisma.webinarsWhereInput = {
-      deleted_at: null, // 1)
-      ...(programId ? { id_program: programId } : {}),
+      deleted_at: null,
       ...(search
         ? {
             OR: [
@@ -162,9 +156,6 @@ export class WebinarsService {
     await this.prisma.webinars.update({
       where: { id: w.id},
       data: {
-        absen_code: code,
-        absen_valid_date: expiresAt,
-        is_generated: true,
         updated_at: new Date(),
       },
     });
@@ -286,17 +277,101 @@ export class WebinarsService {
   }
 
   // ---------- ASSIGNMENT (still under programs route) ----------
-  async assignToProgram(id_program: string, id_webinar: string) {
-    // Assign existing webinar to a program (link), creation remains program-agnostic
-    const w = await this.detailsById(id_webinar);
-    // Optionally ensure program exists if you want strong guarantee:
-    const p = await this.prisma.programs.findUnique({ where: { id: id_program } });
-    if (!p || p.is_active === false) throw new NotFoundException('PROGRAM_NOT_FOUND');
 
-    return this.prisma.webinars.update({
-      where: { id: w.id },
-      data: { id_program, updated_at: new Date() },
-      select: this.select,
+
+  async assignParticipants(id_webinar: string, candidateIds: string[], status: 'register' | 'attended' = 'register') {
+    // if (!candidateIds?.length) throw new BadRequestException('NO_CANDIDATES_TO_ASSIGN');
+
+    if (!candidateIds?.length) {
+        throw new BadRequestException({ code: 'NO_CANDIDATES_TO_ASSIGN' });
+      }
+    // ensure webinar exists and not deleted
+    await this.detailsById(id_webinar);
+
+    // fetch existing links in one shot
+    const existing = await this.prisma.candidate_webinars.findMany({
+      where: { id_webinar, id_candidate: { in: candidateIds } },
+      select: { id: true, id_candidate: true, deleted_at: true },
     });
+    const byCandidate = new Map(existing.map(e => [e.id_candidate, e]));
+
+    let created = 0;
+    let restored = 0;
+    let skipped = 0;
+
+    for (const id_candidate of candidateIds) {
+      const found = byCandidate.get(id_candidate);
+      if (!found) {
+        await this.prisma.candidate_webinars.create({
+          data: {
+            id_candidate,
+            id_webinar,
+            status,
+            created_at: new Date(),
+            updated_at: new Date(),
+            deleted_at: null,
+          } as any,
+        });
+        created++;
+        continue;
+      }
+
+      if (found.deleted_at) {
+        await this.prisma.candidate_webinars.update({
+          where: { id: found.id },
+          data: { deleted_at: null, status, updated_at: new Date() },
+        });
+        restored++;
+      } else {
+        skipped++;
+      }
+    }
+
+    return { createdCount: created, restoredCount: restored, skippedCount: skipped };
+  }
+
+  async detachParticipants(
+    id_webinar: string,
+    candidateIds: string[]
+  ) {
+    if (!candidateIds?.length) {
+      throw new BadRequestException('NO_CANDIDATES_TO_DETACH');
+    }
+
+    // ensure webinar exists and not deleted
+    await this.detailsById(id_webinar);
+
+    // fetch existing links in one shot
+    const existing = await this.prisma.candidate_webinars.findMany({
+      where: { id_webinar, id_candidate: { in: candidateIds } },
+      select: { id: true, id_candidate: true, deleted_at: true },
+    });
+
+    const byCandidate = new Map(existing.map(e => [e.id_candidate, e]));
+    let detached = 0;
+    let skipped = 0;
+
+    for (const id_candidate of candidateIds) {
+      const row = byCandidate.get(id_candidate);
+      if (!row) continue; // will be counted as missing below
+
+      if (row.deleted_at) {
+        skipped++;
+        continue;
+      }
+
+      await this.prisma.candidate_webinars.update({
+        where: { id: row.id },
+        data: {
+          deleted_at: new Date(),
+          updated_at: new Date(),
+        } as any,
+      });
+
+      detached++;
+    }
+
+    const missing = candidateIds.length - existing.length;
+    return { detachedCount: detached, skippedCount: skipped, missingCount: Math.max(0, missing) };
   }
 }

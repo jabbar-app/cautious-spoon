@@ -13,7 +13,7 @@ import { safeBcryptCompare } from '../../common/utils/crypto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { buildVerifyUrl as buildUrlWithToken } from '../../common/utils/url'; // reuse helper; it just appends ?token=...
-import { rounds, findMatchingRefresh, buildVerifyUrl, setCookie, randomHex, parseTtlMs, hash, throttle } from './auth.helpers';
+import { rounds, findMatchingRefresh, buildVerifyUrl, setCookie, randomHex, parseTtlMs, hash, throttle, findMatchingRefreshEmployer, findMatchingRefreshCandidate } from './auth.helpers';
 
 const RESEND_COOLDOWN_MS = 60_000;
 const lastSendAt = new Map<string, number>();
@@ -119,7 +119,7 @@ export class AuthService {
     return { roleTitles, permTitles };
   }
 
-  private readonly SA_TITLES = (process.env.SUPERADMIN_ROLE_TITLES || 'system_admin').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  // private readonly SA_TITLES = (process.env.SUPERADMIN_ROLE_TITLES || 'system_admin').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 
   // ===== Admin (DB-backed rotating refresh) =====
   async loginAdmin(email: string, password: string, ctx: { ip: string; ua: string; res: any }) {
@@ -420,124 +420,293 @@ export class AuthService {
     return { verification_sent: true };
   }
 
-  // ===== Superadmin / Employer / Candidate (JWT refresh + blacklist) =====
-  // async loginSuperadmin(email: string, password: string, ctx: { ip: string; ua: string; res: any }) {
+  // async loginSuperadmin(email: string, password: string, ctx: { res: any }) {
+  //   const e = await this.prisma.superadmins.findFirst({ where: { email } });
+  //   if (!e) throw new UnauthorizedException('INVALID_CREDENTIALS');
+  //   const ok = await bcrypt.compare(password, e.password);
+  //   if (!ok) throw new UnauthorizedException('INVALID_CREDENTIALS');
 
-  //   const admin = await this.prisma.superadmins.findFirst({
-  //     where: { email },
-  //   });
+  //   const accessToken = await this.signAccess(e.id, 'superadmin');
+  //   const { refreshPlain, expires_at } = await this.signRefreshJwt(e.id, 'superadmin');
 
-  //   // Do not reveal which factor failed
-  //   if (!admin || !admin.password) {
-  //     throw new UnauthorizedException('INVALID_CREDENTIALS');
-  //   }
+  //   console.log(refreshPlain)
+  //   setCookie(ctx.res, 'superadmin_refresh_token', refreshPlain, expires_at);
 
-  //   // Safe bcrypt compare
-  //   const ok = await bcrypt.compare(password, admin.password);
-  //   if (!ok) {
-  //     throw new UnauthorizedException('INVALID_CREDENTIALS');
-  //   }
-
-  //   const accessToken = await this.signAccess(admin.id, 'admin');
-
-  //   // refresh token cookie
-  //   const refreshPlain = randomHex(64);
-  //   const token_hash = await bcrypt.hash(refreshPlain, rounds());
-  //   const now = new Date();
-  //   const expires_at = new Date(now.getTime() + parseTtlMs(process.env.JWT_REFRESH_TTL ?? '30d'));
-
-
-  //   setCookie(ctx.res, 'refresh_token', refreshPlain, expires_at);
-
-  //   const profile = await this.buildAdminProfile(admin.id);
-  //   return { accessToken, user: profile };
+  //   return { accessToken, user: { id: e.id, email: e.email } };
   // }
 
-  async loginSuperadmin(email: string, password: string, ctx: { res: any }) {
-    const e = await this.prisma.superadmins.findFirst({ where: { email } });
-    if (!e) throw new UnauthorizedException('INVALID_CREDENTIALS');
-    const ok = await bcrypt.compare(password, e.password);
-    if (!ok) throw new UnauthorizedException('INVALID_CREDENTIALS');
+  async loginSuperadmin(email: string, password: string, ctx: { ip: string; ua: string; res: any }) {
+    const admin = await this.prisma.superadmins.findFirst({
+      where: { email },
+    });
 
-    const accessToken = await this.signAccess(e.id, 'superadmin');
-    const { refreshPlain, expires_at } = await this.signRefreshJwt(e.id, 'superadmin');
-
-    console.log(refreshPlain)
-    setCookie(ctx.res, 'superadmin_refresh_token', refreshPlain, expires_at);
-
-    return { accessToken, user: { id: e.id, email: e.email } };
-  }
-
-  async loginEmployer(email: string, password: string, ctx: { res: any }) {
-    const e = await this.prisma.employers.findFirst({ where: { email, deleted_at: null } });
-    if (!e) throw new UnauthorizedException('INVALID_CREDENTIALS');
-    const ok = await bcrypt.compare(password, e.password);
-    if (!ok) throw new UnauthorizedException('INVALID_CREDENTIALS');
-    if (!e.email_verified) throw new ForbiddenException('EMAIL_NOT_VERIFIED');
-
-    const accessToken = await this.signAccess(e.id, 'employer');
-    const { refreshPlain, expires_at } = await this.signRefreshJwt(e.id, 'employer');
-    setCookie(ctx.res, 'employer_refresh_token', refreshPlain, expires_at);
-
-    return { accessToken, user: { id: e.id, email: e.email, name: e.name ?? '', phone: e.phone ?? '', last_login: e.last_login ?? null, created_at: e.created_at ?? null } };
-  }
-
-  async loginCandidate(email: string, password: string, ctx: { res: any }) {
-    const c = await this.prisma.candidates.findFirst({ where: { email, deleted_at: null } });
-    if (!c) throw new UnauthorizedException('INVALID_CREDENTIALS');
-    const ok = await bcrypt.compare(password, c.password);
-    if (!ok) throw new UnauthorizedException('INVALID_CREDENTIALS');
-    if (!c.email_verified) throw new ForbiddenException('EMAIL_NOT_VERIFIED');
-
-    const accessToken = await this.signAccess(c.id, 'candidate');
-    const { refreshPlain, expires_at } = await this.signRefreshJwt(c.id, 'candidate');
-    setCookie(ctx.res, 'candidate_refresh_token', refreshPlain, expires_at);
-
-    return { accessToken, user: { id: c.id, email: c.email, name: c.name ?? '', phone: c.phone ?? '', last_login: c.last_login ?? null, created_at: c.created_at ?? null } };
-  }
-
-  async refreshGeneric(oldRefresh: string, typ: Exclude<UserType, 'admin'>, ctx: { ip: string; ua: string; res: any; cookieName: string }) {
-    if (!oldRefresh) throw new ForbiddenException('MISSING_REFRESH');
-
-    // reject if blacklisted
-    if (await this.isBlacklisted(oldRefresh)) throw new ForbiddenException('REFRESH_REVOKED');
-
-    let decoded: any;
-    try {
-      decoded = await this.jwt.verifyAsync(oldRefresh, { secret: process.env.JWT_REFRESH_SECRET! });
-    } catch {
-      throw new ForbiddenException('INVALID_REFRESH');
+    // Do not reveal which factor failed
+    if (!admin || !admin.password) {
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
     }
-    if (decoded.typ !== typ) throw new ForbiddenException('INVALID_REFRESH_TYPE');
 
-    // rotate: blacklist old, issue new
-    await this.blacklist(oldRefresh, typ);
+    // Safe bcrypt compare
+    const ok = await bcrypt.compare(password, admin.password);
+    if (!ok) {
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
+    }
 
-    const accessToken = await this.signAccess(decoded.sub, typ);
-    const { refreshPlain, expires_at } = await this.signRefreshJwt(decoded.sub, typ);
-    setCookie(ctx.res, ctx.cookieName, refreshPlain, expires_at);
+    const accessToken = await this.signAccess(admin.id, 'superadmin');
 
-    // minimal profile by type
-    const user =
-      typ === 'candidate'
-        ? await this.prisma.candidates.findUnique({ where: { id: decoded.sub } })
-        : typ === 'employer'
-        ? await this.prisma.employers.findUnique({ where: { id: decoded.sub } })
-        : await this.prisma.superadmins.findUnique({ where: { id: decoded.sub } });
+    // refresh token cookie
+    const refreshPlain = randomHex(64);
+    const token_hash = await bcrypt.hash(refreshPlain, rounds());
+    const now = new Date();
+    const expires_at = new Date(now.getTime() + parseTtlMs(process.env.JWT_REFRESH_TTL ?? '30d'));
 
-    return {
-      accessToken,
-      user: user
-        ? {
-            id: (user as any).id,
-            email: (user as any).email ?? '',
-            name: (user as any).name ?? '',
-            phone: (user as any).phone ?? '',
-            last_login: (user as any).last_login ?? null,
-            created_at: (user as any).created_at ?? null,
-          }
-        : { id: decoded.sub },
-    };
+    await this.prisma.superadmin_refresh_tokens.create({
+      data: {
+        admin_id: admin.id,
+        token_hash,
+        issued_at: now,
+        expires_at,
+        ip: ctx.ip,
+        user_agent: ctx.ua,
+      },
+    });
+
+    setCookie(ctx.res, 'refresh_token', refreshPlain, expires_at);
+
+    const profile = await this.buildAdminProfile(admin.id);
+    return { accessToken, user: profile };
+  }
+
+  async refreshSuperadmin(oldToken: string, ctx: { ip: string; ua: string; res: any }) {
+    if (!oldToken) throw new ForbiddenException('MISSING_REFRESH');
+
+    const tokens = await this.prisma.superadmin_refresh_tokens.findMany({
+      where: { revoked_at: null },
+      orderBy: { issued_at: 'desc' },
+    });
+
+    const match = await findMatchingRefresh(oldToken, tokens);
+    if (!match) throw new ForbiddenException('INVALID_REFRESH');
+
+    if (match.expires_at.getTime() < Date.now()) {
+      await this.prisma.superadmin_refresh_tokens.update({ where: { id: match.id }, data: { revoked_at: new Date() } });
+      throw new ForbiddenException('REFRESH_EXPIRED');
+    }
+
+    // rotate
+    await this.prisma.superadmin_refresh_tokens.update({ where: { id: match.id }, data: { revoked_at: new Date() } });
+
+    const refreshPlain = randomHex(64);
+    const token_hash = await bcrypt.hash(refreshPlain, rounds());
+    const expires_at = new Date(Date.now() + parseTtlMs(process.env.JWT_REFRESH_TTL ?? '30d'));
+
+    await this.prisma.superadmin_refresh_tokens.create({
+      data: {
+        admin_id: match.admin_id,
+        token_hash,
+        issued_at: new Date(),
+        expires_at,
+        ip: ctx.ip,
+        user_agent: ctx.ua,
+      },
+    });
+
+    const accessToken = await this.signAccess(match.admin_id, 'superadmin');
+    setCookie(ctx.res, 'refresh_token', refreshPlain, expires_at);
+    const profile = await this.buildAdminProfile(match.admin_id);
+    return { accessToken, user: profile };
+  }
+
+  // async loginEmployer(email: string, password: string, ctx: { res: any }) {
+  //   const e = await this.prisma.employers.findFirst({ where: { email, deleted_at: null } });
+  //   if (!e) throw new UnauthorizedException('INVALID_CREDENTIALS');
+  //   const ok = await bcrypt.compare(password, e.password);
+  //   if (!ok) throw new UnauthorizedException('INVALID_CREDENTIALS');
+  //   if (!e.email_verified) throw new ForbiddenException('EMAIL_NOT_VERIFIED');
+
+  //   const accessToken = await this.signAccess(e.id, 'employer');
+  //   const { refreshPlain, expires_at } = await this.signRefreshJwt(e.id, 'employer');
+  //   setCookie(ctx.res, 'employer_refresh_token', refreshPlain, expires_at);
+
+  //   return { accessToken, user: { id: e.id, email: e.email, name: e.name ?? '', phone: e.phone ?? '', last_login: e.last_login ?? null, created_at: e.created_at ?? null } };
+  // }
+
+  async loginEmployer(email: string, password: string, ctx: { ip: string; ua: string; res: any }) {
+
+    const employer = await this.prisma.employers.findFirst({
+      where: { email, deleted_at:null },
+    });
+
+    // Do not reveal which factor failed
+    if (!employer || !employer.password) {
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
+    }
+
+    // Safe bcrypt compare
+    const ok = await bcrypt.compare(password, employer.password);
+    if (!ok) {
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
+    }
+
+    const accessToken = await this.signAccess(employer.id, 'employer');
+
+    // refresh token cookie
+    const refreshPlain = randomHex(64);
+    const token_hash = await bcrypt.hash(refreshPlain, rounds());
+    const now = new Date();
+    const expires_at = new Date(now.getTime() + parseTtlMs(process.env.JWT_REFRESH_TTL ?? '30d'));
+
+    await this.prisma.employer_refresh_tokens.create({
+      data: {
+        employer_id: employer.id,
+        token_hash,
+        issued_at: now,
+        expires_at,
+        ip: ctx.ip,
+        user_agent: ctx.ua,
+      },
+    });
+
+    setCookie(ctx.res, 'refresh_token', refreshPlain, expires_at);
+
+    const profile = await this.buildAdminProfile(employer.id);
+    return { accessToken, user: profile };
+  }
+
+
+  async refreshEmployer(oldToken: string, ctx: { ip: string; ua: string; res: any }) {
+    if (!oldToken) throw new ForbiddenException('MISSING_REFRESH');
+
+    const tokens = await this.prisma.employer_refresh_tokens.findMany({
+      where: { revoked_at: null },
+      orderBy: { issued_at: 'desc' },
+    });
+
+    const match = await findMatchingRefreshEmployer(oldToken, tokens);
+    if (!match) throw new ForbiddenException('INVALID_REFRESH');
+
+    if (match.expires_at.getTime() < Date.now()) {
+      await this.prisma.employer_refresh_tokens.update({ where: { id: match.id }, data: { revoked_at: new Date() } });
+      throw new ForbiddenException('REFRESH_EXPIRED');
+    }
+
+    // rotate
+    await this.prisma.employer_refresh_tokens.update({ where: { id: match.id }, data: { revoked_at: new Date() } });
+
+    const refreshPlain = randomHex(64);
+    const token_hash = await bcrypt.hash(refreshPlain, rounds());
+    const expires_at = new Date(Date.now() + parseTtlMs(process.env.JWT_REFRESH_TTL ?? '30d'));
+
+    await this.prisma.employer_refresh_tokens.create({
+      data: {
+        employer_id: match.employer_id,
+        token_hash,
+        issued_at: new Date(),
+        expires_at,
+        ip: ctx.ip,
+        user_agent: ctx.ua,
+      },
+    });
+
+    const accessToken = await this.signAccess(match.employer_id, 'superadmin');
+    setCookie(ctx.res, 'refresh_token', refreshPlain, expires_at);
+    const profile = await this.buildAdminProfile(match.employer_id);
+    return { accessToken, user: profile };
+  }
+
+  // async loginCandidate(email: string, password: string, ctx: { res: any }) {
+  //   const c = await this.prisma.candidates.findFirst({ where: { email, deleted_at: null } });
+  //   if (!c) throw new UnauthorizedException('INVALID_CREDENTIALS');
+  //   const ok = await bcrypt.compare(password, c.password);
+  //   if (!ok) throw new UnauthorizedException('INVALID_CREDENTIALS');
+  //   if (!c.email_verified) throw new ForbiddenException('EMAIL_NOT_VERIFIED');
+
+  //   const accessToken = await this.signAccess(c.id, 'candidate');
+  //   const { refreshPlain, expires_at } = await this.signRefreshJwt(c.id, 'candidate');
+  //   setCookie(ctx.res, 'candidate_refresh_token', refreshPlain, expires_at);
+
+  //   return { accessToken, user: { id: c.id, email: c.email, name: c.name ?? '', phone: c.phone ?? '', last_login: c.last_login ?? null, created_at: c.created_at ?? null } };
+  // }
+
+  async loginCandidate(email: string, password: string, ctx: { ip: string; ua: string; res: any }) {
+
+    const candidate = await this.prisma.candidates.findFirst({
+      where: { email, deleted_at:null },
+    });
+
+    // Do not reveal which factor failed
+    if (!candidate || !candidate.password) {
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
+    }
+
+    // Safe bcrypt compare
+    const ok = await bcrypt.compare(password, candidate.password);
+    if (!ok) {
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
+    }
+
+    const accessToken = await this.signAccess(candidate.id, 'candidate');
+
+    // refresh token cookie
+    const refreshPlain = randomHex(64);
+    const token_hash = await bcrypt.hash(refreshPlain, rounds());
+    const now = new Date();
+    const expires_at = new Date(now.getTime() + parseTtlMs(process.env.JWT_REFRESH_TTL ?? '30d'));
+
+    await this.prisma.candidate_refresh_tokens.create({
+      data: {
+        candidate_id: candidate.id,
+        token_hash,
+        issued_at: now,
+        expires_at,
+        ip: ctx.ip,
+        user_agent: ctx.ua,
+      },
+    });
+
+    setCookie(ctx.res, 'refresh_token', refreshPlain, expires_at);
+
+    const profile = await this.buildAdminProfile(candidate.id);
+    return { accessToken, user: profile };
+  }
+
+  async refreshCandidate(oldToken: string, ctx: { ip: string; ua: string; res: any }) {
+    if (!oldToken) throw new ForbiddenException('MISSING_REFRESH');
+
+    const tokens = await this.prisma.candidate_refresh_tokens.findMany({
+      where: { revoked_at: null },
+      orderBy: { issued_at: 'desc' },
+    });
+
+    const match = await findMatchingRefreshCandidate(oldToken, tokens);
+    if (!match) throw new ForbiddenException('INVALID_REFRESH');
+
+    if (match.expires_at.getTime() < Date.now()) {
+      await this.prisma.candidate_refresh_tokens.update({ where: { id: match.id }, data: { revoked_at: new Date() } });
+      throw new ForbiddenException('REFRESH_EXPIRED');
+    }
+
+    // rotate
+    await this.prisma.candidate_refresh_tokens.update({ where: { id: match.id }, data: { revoked_at: new Date() } });
+
+    const refreshPlain = randomHex(64);
+    const token_hash = await bcrypt.hash(refreshPlain, rounds());
+    const expires_at = new Date(Date.now() + parseTtlMs(process.env.JWT_REFRESH_TTL ?? '30d'));
+
+    await this.prisma.candidate_refresh_tokens.create({
+      data: {
+        candidate_id: match.candidate_id,
+        token_hash,
+        issued_at: new Date(),
+        expires_at,
+        ip: ctx.ip,
+        user_agent: ctx.ua,
+      },
+    });
+
+    const accessToken = await this.signAccess(match.candidate_id, 'superadmin');
+    setCookie(ctx.res, 'refresh_token', refreshPlain, expires_at);
+    const profile = await this.buildAdminProfile(match.candidate_id);
+    return { accessToken, user: profile };
   }
 
   async logoutGeneric(oldRefresh: string, typ: string) {
@@ -597,6 +766,7 @@ export class AuthService {
     });
   }
 
+  // VERIFICATIONS
   async verifyEmployerEmail(token: string) {
   const payload = await this.jwt.verifyAsync<{ sub: string; typ: string; purpose: string }>(
     token,
@@ -641,6 +811,7 @@ export class AuthService {
   return { verified: true };
   }
 
+  //FORGOT PASSWORD
   async forgotAdmin(dto: ForgotPasswordDto) {
     const key = `forgot:admin:${dto.email.toLowerCase()}`;
     const throttled = throttle(key);
@@ -695,7 +866,6 @@ export class AuthService {
     return { ok: true };
   }
 
-  // mirror for candidate
   async forgotCandidate(dto: ForgotPasswordDto) {
     const key = `forgot:candidate:${dto.email.toLowerCase()}`;
     const throttled = throttle(key);
@@ -779,5 +949,52 @@ export class AuthService {
       });
     }
     return { ok: true };
+  }
+
+
+  //REFRESH TOKEN GENERIC
+
+  async refreshGeneric(oldRefresh: string, typ: Exclude<UserType, 'admin'>, ctx: { ip: string; ua: string; res: any; cookieName: string }) {
+    if (!oldRefresh) throw new ForbiddenException('MISSING_REFRESH');
+
+    // reject if blacklisted
+    if (await this.isBlacklisted(oldRefresh)) throw new ForbiddenException('REFRESH_REVOKED');
+
+    let decoded: any;
+    try {
+      decoded = await this.jwt.verifyAsync(oldRefresh, { secret: process.env.JWT_REFRESH_SECRET! });
+    } catch {
+      throw new ForbiddenException('INVALID_REFRESH');
+    }
+    if (decoded.typ !== typ) throw new ForbiddenException('INVALID_REFRESH_TYPE');
+
+    // rotate: blacklist old, issue new
+    await this.blacklist(oldRefresh, typ);
+
+    const accessToken = await this.signAccess(decoded.sub, typ);
+    const { refreshPlain, expires_at } = await this.signRefreshJwt(decoded.sub, typ);
+    setCookie(ctx.res, ctx.cookieName, refreshPlain, expires_at);
+
+    // minimal profile by type
+    const user =
+      typ === 'candidate'
+        ? await this.prisma.candidates.findUnique({ where: { id: decoded.sub } })
+        : typ === 'employer'
+        ? await this.prisma.employers.findUnique({ where: { id: decoded.sub } })
+        : await this.prisma.superadmins.findUnique({ where: { id: decoded.sub } });
+
+    return {
+      accessToken,
+      user: user
+        ? {
+            id: (user as any).id,
+            email: (user as any).email ?? '',
+            name: (user as any).name ?? '',
+            phone: (user as any).phone ?? '',
+            last_login: (user as any).last_login ?? null,
+            created_at: (user as any).created_at ?? null,
+          }
+        : { id: decoded.sub },
+    };
   }
 }

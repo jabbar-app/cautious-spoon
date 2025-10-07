@@ -38,5 +38,22 @@ async function bootstrap() {
   logger.warn('App starting...');
   await app.listen(port);
   logger.log(`Server listening on :${port}`);
-}
+
+
+  //   const server = app.getHttpAdapter().getInstance();
+  //   const router = server.router;
+  //   const availableRoutes: [] = router.stack
+  //     .map(layer => {
+  //       if (layer.route) {
+  //         return {
+  //           route: {
+  //             path: layer.route?.path,
+  //             method: layer.route?.stack[0].method,
+  //           },
+  //         };
+  //       }
+  //     })
+  //     .filter(item => item !== undefined);
+  //   console.log(availableRoutes);
+  }
 bootstrap();

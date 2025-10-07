@@ -1,12 +1,20 @@
 // src/common/guards/permissions.guard.ts
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { REQ_PERMS } from '../decorators/permissions.decorator';
 import { PrismaService } from '../../core/database/prisma.service';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
-  constructor(private reflector: Reflector, private prisma: PrismaService) {}
+  constructor(
+    private reflector: Reflector,
+    private prisma: PrismaService,
+  ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const required = this.reflector.getAllAndOverride<string[]>(REQ_PERMS, [
@@ -34,9 +42,12 @@ export class PermissionsGuard implements CanActivate {
     });
 
     // Fast path (optional): system_admin role
-    if (adminRoles.some((ar) => ar.roles?.title === 'system_admin')) return true;
+    if (adminRoles.some((ar) => ar.roles?.title === 'system_admin'))
+      return true;
 
-    const roleIds = adminRoles.map((r) => r.id_role).filter((v) => v !== null) as bigint[];
+    const roleIds = adminRoles
+      .map((r) => r.id_role)
+      .filter((v) => v !== null) as bigint[];
     if (roleIds.length === 0) throw new ForbiddenException('NO_ROLES');
 
     const rolePermRows = await this.prisma.role_permissions.findMany({
@@ -44,7 +55,9 @@ export class PermissionsGuard implements CanActivate {
       select: { id_permission: true },
     });
 
-    const permIds = rolePermRows.map((rp) => rp.id_permission).filter((v) => v !== null) as bigint[];
+    const permIds = rolePermRows
+      .map((rp) => rp.id_permission)
+      .filter((v) => v !== null) as bigint[];
     if (permIds.length === 0) throw new ForbiddenException('NO_PERMISSIONS');
 
     const perms = await this.prisma.permissions.findMany({

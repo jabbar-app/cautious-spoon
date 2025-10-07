@@ -61,7 +61,6 @@ export class ProgramsController {
     return this.service.softDelete(id, adminId);
   }
 
-
   // GET Programs > Participants
   @Get(':id_program/participants')
   @Permissions('program.participants')

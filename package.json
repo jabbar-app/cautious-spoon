@@ -21,7 +21,7 @@
     "db:init:fresh": "node scripts/db-init.js --fresh",
     "migrate:init": "npx prisma migrate diff --from-empty --to-schema-datasource ./prisma/schema.prisma --script --output prisma/migrations/000_init/migration.sql",
     "migrate:deploy": "prisma migrate deploy",
-    "seed:rbac": "ts-node prisma/seed.ts",
+    "seed:rbac": "ts-node prisma/seed/seed.ts",
     "rbac:one-shot": "npm run migrate:deploy && npm run seed:rbac"
   },
   "dependencies": {

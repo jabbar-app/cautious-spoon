@@ -22,6 +22,21 @@ async function findMatchingRefresh( plain: string, list: { id: string; token_has
   return null;
 }
 
+async function findMatchingRefreshEmployer( plain: string, list: { id: string; token_hash: string; employer_id: string; expires_at: Date }[],) {
+  for (const t of list) {
+    if (await bcrypt.compare(plain, t.token_hash)) return t;
+  }
+  return null;
+}
+
+async function findMatchingRefreshCandidate( plain: string, list: { id: string; token_hash: string; candidate_id: string; expires_at: Date }[],) {
+  for (const t of list) {
+    if (await bcrypt.compare(plain, t.token_hash)) return t;
+  }
+  return null;
+}
+
+
 function setCookie(res: any | undefined, name: string, value: string, expires: Date) {
   if (!res) return;
   res.cookie(name, value, {
@@ -72,5 +87,7 @@ export {
     randomHex,
     parseTtlMs,
     hash,
-    throttle
+    throttle,
+    findMatchingRefreshEmployer,
+    findMatchingRefreshCandidate
 }

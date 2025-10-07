@@ -46,7 +46,7 @@ export class ProgramsService {
     title: true,
     registration_date: true,
     program_start_date: true,
-    training_centre: true,
+    training_center: true,
     capacity: true,
     description: true,
     photo: true,
@@ -55,9 +55,7 @@ export class ProgramsService {
     category: true,
     status: true,
     is_active: true,
-    is_visible: true,
     formulir: true,
-    test_schedules: true,
     created_at: true,
     updated_at: true,
     created_by: true,
@@ -75,7 +73,7 @@ export class ProgramsService {
         title: input.title ?? '',
         registration_date: input.registration_date ?? null,
         program_start_date: input.program_start_date ?? null,
-        training_centre: input.training_centre ?? '',
+        training_center: input.training_center ?? '',
         capacity: input.capacity ?? null,
         description: input.description ?? '',
         photo: input.photo ?? '',
@@ -83,10 +81,8 @@ export class ProgramsService {
         duration: input.duration ?? null,
         category: input.category ?? '',
         status: input.status ?? 'upcoming',
-        is_visible: input.is_visible ?? true,
         is_active: true,
         formulir: Array.isArray(input.formulir) ? input.formulir : [],
-        test_schedules: Array.isArray(input.test_schedules) ? input.test_schedules : [],
         created_at: now,
         created_by: adminId,
         updated_at: now,
@@ -136,12 +132,11 @@ export class ProgramsService {
   async getDetails(id_program: string) {
     const row = await this.prisma.programs.findUnique({
       where: { id: id_program },
-      select: this.programSelect,
+      include: { interview_schedules:true}
     });
 
     if (!row) throw new NotFoundException('PROGRAM_NOT_FOUND');
 
-    // 3) throw if deleted
     if (row.deleted_at) throw new NotFoundException('PROGRAM_DELETED');
 
     return row;
@@ -200,18 +195,125 @@ export class ProgramsService {
 
   // Participants (candidate_programs)
   // inside ProgramsService
+  // async listParticipants(id_program: string, query: any) {
+  //   const page = Math.max(1, Number(query.page ?? 1));
+  //   const perPage = Math.min(100, Math.max(1, Number(query.perPage ?? 20)));
+  //   const search = (query.search ?? '').trim();
+  //   const status = (query.status ?? '').trim(); // e.g., 'register'|'attended'|'passed_test'|...
+  //   const all = !!query.all;
+
+  //   // 1) If searching by name/email, resolve candidate IDs first
+  //   let candidateIdFilter: string[] | undefined;
+  //   if (search) {
+  //     const matched = await this.prisma.candidates.findMany({
+  //       where: {
+  //         OR: [
+  //           { name: { contains: search, mode: 'insensitive' } },
+  //           { email: { contains: search, mode: 'insensitive' } },
+  //         ],
+  //       },
+  //       select: { id: true },
+  //     });
+  //     candidateIdFilter = matched.map(m => m.id);
+  //     if (candidateIdFilter.length === 0) {
+  //       return { items: [], page: 1, perPage: 0, total: 0, totalPages: 1, nextCursor: null };
+  //     }
+  //   }
+
+  //   // 2) Build WHERE only with fields that belong to candidate_programs
+  //   const where: Prisma.candidate_programsWhereInput = {
+  //     id_program,
+  //     // deleted_at: null,
+  //     ...(status ? { status } : {}),
+  //     ...(candidateIdFilter ? { id_candidate: { in: candidateIdFilter } } : {}),
+  //   };
+
+  //   // 3) ORDER BY supports link fields and candidate fields
+  //   const orderBy = orderByForCandidatePrograms(query.sort);
+
+  //   // candidate fields you want to return
+  //   const candidateSelect = {
+  //     id: true,
+  //     name: true,
+  //     email: true,
+  //     phone: true,
+  //     sex: true,
+  //     talent_id: true,
+  //     address_info: true,
+  //   } as const;
+
+  //   // 4) Fetch rows (+ candidate include) either ALL or paged
+  //   if (all) {
+  //     const rows = await this.prisma.candidate_programs.findMany({
+  //       where,
+  //       orderBy,
+  //       include: { candidates: { select: candidateSelect } },
+  //     });
+
+  //     const items = rows.map(r => ({
+  //       ...r.candidates,                 // full candidate data
+  //       candidate_program_id: r.id,      // keep link info if UI needs it
+  //       program_status: r.status,
+  //       program_joined_at: r.created_at,
+  //       program_updated_at: r.updated_at,
+  //     }));
+
+  //     return {
+  //       items,
+  //       page: 1,
+  //       perPage: items.length,
+  //       total: items.length,
+  //       totalPages: 1,
+  //       nextCursor: null,
+  //     };
+  //   }
+
+  //   const skip = (page - 1) * perPage;
+
+  //   const [total, rows] = await this.prisma.$transaction([
+  //     this.prisma.candidate_programs.count({ where }),
+  //     this.prisma.candidate_programs.findMany({
+  //       where,
+  //       orderBy,
+  //       skip,
+  //       take: perPage,
+  //       include: { candidates: { select: candidateSelect } },
+  //     }),
+  //   ]);
+
+  //   const items = rows.map(r => ({
+  //     ...r.candidates,
+  //     candidate_program_id: r.id,
+  //     program_status: r.status,
+  //     program_joined_at: r.created_at,
+  //     program_updated_at: r.updated_at,
+  //   }));
+
+  //   return {
+  //     items,
+  //     page,
+  //     perPage,
+  //     total,
+  //     totalPages: Math.max(1, Math.ceil(total / perPage)),
+  //     nextCursor: null,
+  //   };
+  // }
+
+  // Make sure you have: import { Prisma } from '@prisma/client';
+
   async listParticipants(id_program: string, query: any) {
     const page = Math.max(1, Number(query.page ?? 1));
     const perPage = Math.min(100, Math.max(1, Number(query.perPage ?? 20)));
     const search = (query.search ?? '').trim();
     const status = (query.status ?? '').trim(); // e.g., 'register'|'attended'|'passed_test'|...
-    const all = !!query.all;
+    const all = query.all === true || query.all === 'true';
 
     // 1) If searching by name/email, resolve candidate IDs first
     let candidateIdFilter: string[] | undefined;
     if (search) {
       const matched = await this.prisma.candidates.findMany({
         where: {
+          // deleted_at: null, // uncomment if you soft-delete candidates
           OR: [
             { name: { contains: search, mode: 'insensitive' } },
             { email: { contains: search, mode: 'insensitive' } },
@@ -219,16 +321,16 @@ export class ProgramsService {
         },
         select: { id: true },
       });
-      candidateIdFilter = matched.map(m => m.id);
+      candidateIdFilter = matched.map((m) => m.id);
       if (candidateIdFilter.length === 0) {
         return { items: [], page: 1, perPage: 0, total: 0, totalPages: 1, nextCursor: null };
       }
     }
 
-    // 2) Build WHERE only with fields that belong to candidate_programs
+    // 2) WHERE only with fields from candidate_programs
     const where: Prisma.candidate_programsWhereInput = {
       id_program,
-      // deleted_at: null,
+      // deleted_at: null, // uncomment if you soft-delete link rows
       ...(status ? { status } : {}),
       ...(candidateIdFilter ? { id_candidate: { in: candidateIdFilter } } : {}),
     };
@@ -236,7 +338,7 @@ export class ProgramsService {
     // 3) ORDER BY supports link fields and candidate fields
     const orderBy = orderByForCandidatePrograms(query.sort);
 
-    // candidate fields you want to return
+    // Candidate fields you want to include inside candidate_data
     const candidateSelect = {
       id: true,
       name: true,
@@ -247,7 +349,14 @@ export class ProgramsService {
       address_info: true,
     } as const;
 
-    // 4) Fetch rows (+ candidate include) either ALL or paged
+    // Helper to reshape: { ...candidate_programs_row, candidate_data: {...candidate} }
+    const reshape = (rows: Array<any>) =>
+      rows.map(({ candidates, ...cp }) => ({
+        ...cp,                    // full candidate_programs data stays top-level
+        candidate_data: candidates, // nested candidate payload
+      }));
+
+    // 4) Fetch ALL or paged
     if (all) {
       const rows = await this.prisma.candidate_programs.findMany({
         where,
@@ -255,13 +364,7 @@ export class ProgramsService {
         include: { candidates: { select: candidateSelect } },
       });
 
-      const items = rows.map(r => ({
-        ...r.candidates,                 // full candidate data
-        candidate_program_id: r.id,      // keep link info if UI needs it
-        program_status: r.status,
-        program_joined_at: r.created_at,
-        program_updated_at: r.updated_at,
-      }));
+      const items = reshape(rows);
 
       return {
         items,
@@ -286,13 +389,7 @@ export class ProgramsService {
       }),
     ]);
 
-    const items = rows.map(r => ({
-      ...r.candidates,
-      candidate_program_id: r.id,
-      program_status: r.status,
-      program_joined_at: r.created_at,
-      program_updated_at: r.updated_at,
-    }));
+    const items = reshape(rows);
 
     return {
       items,

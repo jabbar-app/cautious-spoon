@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import * as bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
-import { PERMISSIONS } from './seed/permissions';
+import { PERMISSIONS } from './permissions';
 
 const prisma = new PrismaClient();
 
@@ -46,7 +46,6 @@ async function main() {
       data: {
         email: adminEmail,
         password: await bcrypt.hash(adminPassword, rounds),
-        email_verified: true,
         created_at: new Date(),
       },
     });

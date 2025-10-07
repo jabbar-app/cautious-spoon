@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { CandidatesService } from './candidates.service';
 import { JwtCandidateGuard } from '../../common/guards/jwt-candidate.guard';
 
@@ -6,6 +16,9 @@ import { CreateCandidateSkillDto } from './dto/skills/create-candidate-skill.dto
 import { UpdateCandidateSkillDto } from './dto/skills/update-candidate-skill.dto';
 import { CreateCandidateWorkExpDto } from './dto/work-exps/create-candidate-work-exp.dto';
 import { UpdateCandidateWorkExpDto } from './dto/work-exps/update-candidate-work-exp.dto';
+import { GetCandidateParamsDto } from './dto/get-candidate-params.dto';
+import { UpdateCandidateDto } from './dto/update-candidate.dto';
+import { SelfCreateProgramDto } from './dto/programs/self-create-program.dto';
 
 /**
  * Self-service endpoints for authenticated candidates.
@@ -16,11 +29,17 @@ import { UpdateCandidateWorkExpDto } from './dto/work-exps/update-candidate-work
 export class CandidateSelfController {
   constructor(private readonly service: CandidatesService) {}
 
-  @Get()
-  getMe(@Req() req: any) {
-    const candidateId: string = req.user.id;
-    return this.service.detailsExpanded(candidateId);
-  }
+  // @Get()
+  // getMe(@Req() req: any) {
+  //   const candidateId: string = req.user.id;
+  //   return this.service.detailsExpanded(candidateId);
+  // }
+
+  // @Put()
+  // async updateMe(@Body() dto: UpdateCandidateDto, @Req() req: any) {
+  //   const candidateId: string = req.user.id;
+  //   return this.service.updateMe(candidateId, dto);
+  // }
   // -------- Skills --------
   @Post('skills')
   addMySkill(@Body() dto: CreateCandidateSkillDto, @Req() req: any) {
@@ -29,7 +48,11 @@ export class CandidateSelfController {
   }
 
   @Put('skills/:skillId')
-  updateMySkill(@Param('skillId') skillId: string, @Body() dto: UpdateCandidateSkillDto, @Req() req: any) {
+  updateMySkill(
+    @Param('skillId') skillId: string,
+    @Body() dto: UpdateCandidateSkillDto,
+    @Req() req: any,
+  ) {
     const candidateId: string = req.user.id;
     return this.service.updateSkill(candidateId, skillId, dto);
   }
@@ -48,7 +71,11 @@ export class CandidateSelfController {
   }
 
   @Put('work-exps/:workId')
-  updateMyWorkExp(@Param('workId') workId: string, @Body() dto: UpdateCandidateWorkExpDto, @Req() req: any) {
+  updateMyWorkExp(
+    @Param('workId') workId: string,
+    @Body() dto: UpdateCandidateWorkExpDto,
+    @Req() req: any,
+  ) {
     const candidateId: string = req.user.id;
     return this.service.updateWorkExp(candidateId, workId, dto);
   }
@@ -57,5 +84,22 @@ export class CandidateSelfController {
   deleteMyWorkExp(@Param('workId') workId: string, @Req() req: any) {
     const candidateId: string = req.user.id;
     return this.service.deleteWorkExp(candidateId, workId);
+  }
+
+  // -------- Work Experiences --------
+  @Post('programs')
+  joinProgram(@Body() dto: CreateCandidateWorkExpDto, @Req() req: any) {
+    const candidateId: string = req.user.id;
+    return this.service.addWorkExp(candidateId, dto);
+  }
+
+  @Put('programs/:programId')
+  updateProgram(
+    @Param('programId') programId: string,
+    @Body() dto: SelfCreateProgramDto,
+    @Req() req: any,
+  ) {
+    const candidateId: string = req.user.id;
+    return this.service.updateWorkExp(candidateId, programId, dto);
   }
 }

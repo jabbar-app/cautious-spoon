@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
 import { parseSort } from '../../common/utils/sort';
 import { ListRolesDto } from './dto/list-roles.dto';
@@ -11,7 +15,10 @@ export class RolesService {
   private toBigInt(v: string | number): bigint {
     if (typeof v === 'number') return BigInt(v);
     if (/^\d+$/.test(v)) return BigInt(v);
-    throw new BadRequestException({ code: 'INVALID_BIGINT', details: String(v) });
+    throw new BadRequestException({
+      code: 'INVALID_BIGINT',
+      details: String(v),
+    });
     // If your role id can be non-numeric, adjust here.
   }
 
@@ -31,7 +38,10 @@ export class RolesService {
     return rows.map((r: any) => r.permissions);
   }
 
-  private async listRolePermissionsTx(tx: PrismaService | any, roleIdBI: bigint) {
+  private async listRolePermissionsTx(
+    tx: PrismaService | any,
+    roleIdBI: bigint,
+  ) {
     const rows = await tx.role_permissions.findMany({
       where: { id_role: roleIdBI as any, deleted_at: null },
       select: { permissions: { select: { id: true, title: true } } },
@@ -40,21 +50,7 @@ export class RolesService {
     return rows.map((r: any) => r.permissions);
   }
 
-  // async list(where: any, page = 1, perPage = 20) {
-  //   const skip = (page - 1) * perPage;
-  //   const [total, items] = await this.prisma.$transaction([
-  //     this.prisma.roles.count({ where }),
-  //     this.prisma.roles.findMany({
-  //       where,
-  //       skip,
-  //       take: perPage,
-  //       orderBy: { created_at: 'desc' },
-  //     }),
-  //   ]);
-  //   return { total, items };
-  // }
-
-    async list(query: ListRolesDto) {
+  async list(query: ListRolesDto) {
     const { page = 1, perPage = 20, search, sort, all = false, select } = query;
 
     const where: Prisma.rolesWhereInput = {
@@ -62,17 +58,70 @@ export class RolesService {
       ...(search ? { title: { contains: search, mode: 'insensitive' } } : {}),
     };
 
-    const orderBy = parseSort(sort) as Prisma.rolesOrderByWithRelationInput[] | undefined;
+    const orderBy = parseSort(sort) as
+      | Prisma.rolesOrderByWithRelationInput[]
+      | undefined;
 
     const baseSelect: Prisma.rolesSelect =
       select === 'options'
         ? { id: true, title: true }
-        : { id: true, title: true, description: true, created_at: true, updated_at: true };
+        : {
+            id: true,
+            title: true,
+            description: true,
+            created_at: true,
+            updated_at: true,
+          };
 
-    if (all || select === 'options') {
-      return await this.prisma.roles.findMany({ where, orderBy, select: baseSelect });
+    // Count total active permissions once
+    const totalPermsPromise = this.prisma.permissions.count({
+      where: { deleted_at: null },
+    });
+
+    // Helper to attach "permissions: assigned/total" to each role item
+    const attachPermRatio = async <T extends { id: any }>(items: T[]) => {
+      if (!items.length) return items as Array<T & { permissions: string }>;
+
+      const totalPerms = await totalPermsPromise;
+
+      const roleIds = items.map((r) => r.id);
+      const grouped = await this.prisma.role_permissions.groupBy({
+        by: ['id_role'],
+        _count: { id_permission: true },
+        where: {
+          deleted_at: null,
+          id_role: { in: roleIds as any }, // cast for bigint/string compatibility
+        },
+      });
+
+      const countMap = new Map<any, number>(
+        grouped.map((g) => [g.id_role, g._count.id_permission]),
+      );
+
+      return items.map((r) => ({
+        ...r,
+        permissions: `${countMap.get(r.id) || 0}/${totalPerms}`,
+      }));
+    };
+
+    // Return all
+    if (all) {
+      const items = await this.prisma.roles.findMany({
+        where,
+        orderBy,
+        select: baseSelect,
+      });
+      // Keep "options" lean (id/title only) — do NOT append ratio here
+      if (select === 'options') return items;
+      return attachPermRatio(items);
     }
 
+    // Options (dropdowns) — lean payload
+    if (select === 'options') {
+      return this.prisma.roles.findMany({ where, orderBy, select: baseSelect });
+    }
+
+    // Paged list
     const [total, items] = await this.prisma.$transaction([
       this.prisma.roles.count({ where }),
       this.prisma.roles.findMany({
@@ -84,8 +133,17 @@ export class RolesService {
       }),
     ]);
 
+    const itemsWithPerms = await attachPermRatio(items);
     const totalPages = Math.max(1, Math.ceil(total / perPage));
-    return { items, page, perPage, total, totalPages, nextCursor: null };
+
+    return {
+      items: itemsWithPerms,
+      page,
+      perPage,
+      total,
+      totalPages,
+      nextCursor: null,
+    };
   }
 
   create(dto: { title: string; description?: string }) {
@@ -94,11 +152,46 @@ export class RolesService {
     });
   }
 
-  get(id: bigint) {
-    return this.prisma.roles.findUnique({
+  async get(id: bigint) {
+    // 1) Select only needed fields and avoid returning the join row fields
+    const role = await this.prisma.roles.findUnique({
       where: { id },
-      include: { role_permissions: { include: { permissions: true } } },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        created_at: true,
+        created_by: true,
+        updated_at: true,
+        updated_by: true,
+        role_permissions: {
+          where: { deleted_at: null },
+          select: {
+            permissions: {
+              select: {
+                id: true,
+                title: true,
+                dynamic_title: true,
+                description: true,
+                created_at: true,
+                created_by: true,
+                updated_at: true,
+                updated_by: true,
+              },
+            },
+          },
+        },
+      },
     });
+
+    if (!role) throw new NotFoundException('ROLE_NOT_FOUND');
+
+    const flattened = {
+      ...role,
+      role_permissions: role.role_permissions.map((rp) => rp.permissions),
+    };
+
+    return flattened;
   }
 
   update(id: bigint, dto: { title?: string; description?: string }) {
@@ -107,7 +200,6 @@ export class RolesService {
       data: { ...dto },
     });
   }
-
 
   async attachPermissions(
     roleIdParam: string,
@@ -123,10 +215,16 @@ export class RolesService {
       where: { id: roleIdBI, deleted_at: null },
       select: { id: true },
     });
-    if (!role) throw new NotFoundException({ code: 'ROLE_NOT_FOUND', details: roleIdParam });
+    if (!role)
+      throw new NotFoundException({
+        code: 'ROLE_NOT_FOUND',
+        details: roleIdParam,
+      });
 
     // 2) Detect DB type for permissions.id (bigint vs string/int)
-    const sample = await this.prisma.permissions.findFirst({ select: { id: true } });
+    const sample = await this.prisma.permissions.findFirst({
+      select: { id: true },
+    });
     const permIdIsBigInt = typeof sample?.id === 'bigint';
 
     // 3) Coerce payload IDs to correct type
@@ -141,7 +239,13 @@ export class RolesService {
     if (union.length === 0) {
       // Return current permissions (quality-of-life)
       const current = await this.listRolePermissions(roleIdBI);
-      return { attached: 0, revived: 0, alreadyAttached: 0, detached: 0, permissions: current };
+      return {
+        attached: 0,
+        revived: 0,
+        alreadyAttached: 0,
+        detached: 0,
+        permissions: current,
+      };
     }
 
     const existing = await this.prisma.permissions.findMany({
@@ -150,16 +254,24 @@ export class RolesService {
     });
 
     const existSet = new Set(existing.map((r) => String(r.id)));
-    const missingAttach = (attachIds as any[]).filter((id) => !existSet.has(String(id)));
-    const missingDetach = (detachIds as any[]).filter((id) => !existSet.has(String(id)));
+    const missingAttach = (attachIds as any[]).filter(
+      (id) => !existSet.has(String(id)),
+    );
+    const missingDetach = (detachIds as any[]).filter(
+      (id) => !existSet.has(String(id)),
+    );
 
     if (missingAttach.length || missingDetach.length) {
       throw new BadRequestException({
         code: 'PERMISSION_ID_NOT_FOUND',
         details: `Unknown permission ids`,
         fields: {
-          attach: missingAttach.length ? missingAttach.map(String).join(',') : undefined,
-          detach: missingDetach.length ? missingDetach.map(String).join(',') : undefined,
+          attach: missingAttach.length
+            ? missingAttach.map(String).join(',')
+            : undefined,
+          detach: missingDetach.length
+            ? missingDetach.map(String).join(',')
+            : undefined,
         },
       });
     }
@@ -172,13 +284,22 @@ export class RolesService {
     const result = await this.prisma.$transaction(async (tx) => {
       // Read existing links (including soft-deleted) for attach set
       const links = await tx.role_permissions.findMany({
-        where: { id_role: roleIdBI as any, id_permission: { in: attachValid as any } },
+        where: {
+          id_role: roleIdBI as any,
+          id_permission: { in: attachValid as any },
+        },
         select: { id_permission: true, deleted_at: true },
       });
-      const linkMap = new Map(links.map((l) => [String(l.id_permission), l.deleted_at]));
+      const linkMap = new Map(
+        links.map((l) => [String(l.id_permission), l.deleted_at]),
+      );
 
       // Prepare create/revive sets
-      const toCreate: Array<{ id_role: any; id_permission: any; created_by?: string }> = [];
+      const toCreate: Array<{
+        id_role: any;
+        id_permission: any;
+        created_by?: string;
+      }> = [];
       const toRevive: any[] = [];
       let alreadyAttached = 0;
 
@@ -209,7 +330,10 @@ export class RolesService {
       let revived = 0;
       if (toRevive.length > 0) {
         const upd = await tx.role_permissions.updateMany({
-          where: { id_role: roleIdBI as any, id_permission: { in: toRevive as any } },
+          where: {
+            id_role: roleIdBI as any,
+            id_permission: { in: toRevive as any },
+          },
           data: {
             deleted_at: null,
             updated_at: new Date(),
@@ -222,7 +346,11 @@ export class RolesService {
       let detached = 0;
       if (detachValid.length > 0) {
         const upd = await tx.role_permissions.updateMany({
-          where: { id_role: roleIdBI as any, id_permission: { in: detachValid as any }, deleted_at: null },
+          where: {
+            id_role: roleIdBI as any,
+            id_permission: { in: detachValid as any },
+            deleted_at: null,
+          },
           data: {
             deleted_at: new Date(),
             ...(actorId ? { deleted_by: actorId } : {}),
@@ -232,7 +360,13 @@ export class RolesService {
       }
 
       const permissions = await this.listRolePermissionsTx(tx, roleIdBI);
-      return { attached: created, revived, alreadyAttached, detached, permissions };
+      return {
+        attached: created,
+        revived,
+        alreadyAttached,
+        detached,
+        permissions,
+      };
     });
 
     return result;
@@ -244,8 +378,11 @@ export class RolesService {
     if (!role || role.deleted_at) throw new NotFoundException('ROLE_NOT_FOUND');
 
     // ensure admin exists & not soft-deleted
-    const admin = await this.prisma.admins.findUnique({ where: { id: adminId } });
-    if (!admin || admin.deleted_at) throw new NotFoundException('ADMIN_NOT_FOUND');
+    const admin = await this.prisma.admins.findUnique({
+      where: { id: adminId },
+    });
+    if (!admin || admin.deleted_at)
+      throw new NotFoundException('ADMIN_NOT_FOUND');
 
     await this.prisma.admin_roles.upsert({
       where: { id_admin_id_role: { id_admin: adminId, id_role: roleId } },
@@ -257,7 +394,7 @@ export class RolesService {
     return { assigned: true, adminId, roleId: String(roleId) };
   }
 
-async softDelete(roleId: bigint) {
+  async softDelete(roleId: bigint) {
     const role = await this.prisma.roles.findUnique({ where: { id: roleId } });
     if (!role) throw new NotFoundException('ROLE_NOT_FOUND');
 

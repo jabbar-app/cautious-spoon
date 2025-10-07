@@ -1,0 +1,211 @@
+model candidate_webinars {
+    id           BigInt    @id @default(autoincrement())
+    id_candidate String    @db.Uuid
+    id_webinar   String    @db.Uuid
+    status       String?   @default("register") @db.VarChar(50)
+    created_at   DateTime? @db.Timestamptz(6)
+    updated_at   DateTime? @db.Timestamptz(6)
+    deleted_at   DateTime? @db.Timestamptz(6)
+    attended_at  DateTime? @db.Timestamptz(6)
+
+    candidates candidates @relation(fields: [id_candidate], references: [id], onDelete: Cascade)
+    webinars   webinars   @relation(fields: [id_webinar], references: [id], onDelete: Cascade)
+
+    @@unique([id_candidate, id_webinar], map: "idx_candidate_webinar")
+    @@schema("academy")
+}
+
+model programs {
+    id                    String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    title                 String?                         @default("")
+    registration_date     DateTime?                       @db.Timestamptz(6)
+    program_start_date    DateTime?                       @db.Timestamptz(6)
+    training_center       String?                         @default("")
+    capacity              BigInt?
+    description           String?                         @default("")
+    photo                 String?                         @default("")
+    price                 BigInt?
+    duration              BigInt?
+    category              String?                         @default("") @db.VarChar(225)
+    status                String?                         @default("upcoming") @db.VarChar(50)
+    is_active             Boolean?                        @default(true)
+    archived              Boolean?                        @default(true)
+    formulir              String[]                        @default([])
+    created_at            DateTime?                       @db.Timestamptz(6)
+    created_by            String?                         @db.VarChar(225)
+    updated_at            DateTime?                       @db.Timestamptz(6)
+    updated_by            String?                         @db.VarChar(225)
+    deleted_at            DateTime?                       @db.Timestamptz(6)
+    deleted_by            String?                         @db.VarChar(225)
+    candidate_programs    candidate_programs[]
+    interview_schedules   program_interview_schedules[]
+    interview_enrollments program_interview_enrollments[]
+    candidate_screenings  candidate_screenings[]
+
+    @@index([deleted_at], map: "idx_programs_deleted_at")
+    @@schema("academy")
+}
+
+model webinars {
+    id                          String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    title                       String?                       @default("")
+    registration_date           DateTime?                     @db.Timestamptz(6)
+    webinar_date                DateTime?                     @db.Timestamptz(6)
+    capacity                    BigInt?
+    description                 String?                       @default("")
+    photo                       String?                       @default("")
+    link                        String?                       @default("")
+    price                       BigInt?
+    duration                    BigInt?
+    speakers                    String[]
+    category                    String?                       @default("")
+    status                      String?                       @default("upcoming") @db.VarChar(50)
+    is_visible                  Boolean?                      @default(true)
+    is_active                   Boolean?                      @default(true)
+    created_at                  DateTime?                     @db.Timestamptz(6)
+    created_by                  String?                       @db.VarChar(225)
+    updated_at                  DateTime?                     @db.Timestamptz(6)
+    updated_by                  String?                       @db.VarChar(225)
+    deleted_at                  DateTime?                     @db.Timestamptz(6)
+    deleted_by                  String?                       @db.VarChar(225)
+    candidate_bookmark_webinars candidate_bookmark_webinars[]
+    candidate_webinars          candidate_webinars[]
+    attendance_codes            webinar_attendance_codes[]
+    candidate_screenings        candidate_screenings[]
+
+    @@index([deleted_at], map: "idx_webinars_deleted_at")
+    @@schema("academy")
+}
+
+model webinar_attendance_codes {
+    id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    webinar_id String    @db.Uuid
+    code       String
+    valid_from DateTime? @db.Timestamptz(6)
+    valid_to   DateTime? @db.Timestamptz(6)
+    created_at DateTime? @db.Timestamptz(6)
+    created_by String?   @default("") @db.VarChar(50)
+    updated_at DateTime? @db.Timestamptz(6)
+    updated_by String?   @default("") @db.VarChar(50)
+    deleted_at DateTime? @db.Timestamptz(6)
+    deleted_by String?   @default("") @db.VarChar(50)
+    webinar    webinars  @relation(fields: [webinar_id], references: [id], onDelete: Cascade)
+
+    @@index([webinar_id, valid_to], map: "idx_webinar_code_valid")
+    @@schema("academy")
+}
+
+model candidate_screenings {
+    id                       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    candidate_id             String   @db.Uuid
+    webinar_id               String?  @db.Uuid
+    stage                    String?  @default("applied") @db.VarChar(50)
+    is_passed_test           Boolean?
+    is_matches_requirement   Boolean?
+    reject_reason_matches    String?
+    reject_reason_not_passed String?
+
+    assigned_program_id String?   @db.Uuid
+    assigned_by         String?   @db.VarChar(225)
+    assigned_at         DateTime? @db.Timestamptz(6)
+
+    created_at DateTime? @db.Timestamptz(6)
+    updated_at DateTime? @db.Timestamptz(6)
+    deleted_at DateTime? @db.Timestamptz(6)
+    created_by String?   @default("") @db.VarChar(50)
+    updated_by String?   @default("") @db.VarChar(50)
+    deleted_by String?   @default("") @db.VarChar(50)
+
+    candidate        candidates @relation(fields: [candidate_id], references: [id], onDelete: Cascade, map: "fk_candidates_screenings")
+    webinar          webinars?  @relation(fields: [webinar_id], references: [id], onDelete: SetNull, map: "fk_webinars_screenings")
+    assigned_program programs?  @relation(fields: [assigned_program_id], references: [id], onDelete: SetNull, map: "fk_programs_screenings_assigned")
+
+    candidate_programs candidate_programs[]
+
+    @@index([candidate_id, webinar_id, deleted_at], map: "idx_screening_candidate_webinar")
+    @@schema("academy")
+}
+
+model program_interview_schedules {
+    id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    program_id     String    @db.Uuid
+    type           String?   @default("online") @db.VarChar(50)
+    link           String?   @default("")
+    location_label String?   @default("")
+    start_at       DateTime? @db.Timestamptz(6)
+    end_at         DateTime? @db.Timestamptz(6)
+    is_active      Boolean?  @default(true)
+
+    created_at DateTime? @db.Timestamptz(6)
+    updated_at DateTime? @db.Timestamptz(6)
+    deleted_at DateTime? @db.Timestamptz(6)
+
+    program     programs                        @relation(fields: [program_id], references: [id], onDelete: Cascade, map: "fk_programs_interview_schedules")
+    enrollments program_interview_enrollments[]
+
+    @@index([program_id], map: "idx_interview_schedules_program_date")
+    @@schema("academy")
+}
+
+model program_interview_enrollments {
+    id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    candidate_id          String   @db.Uuid
+    program_id            String   @db.Uuid
+    interview_schedule_id String   @db.Uuid
+    status                String?  @default("invited") @db.VarChar(50)
+    passed                Boolean?
+    score                 Json?
+    notes                 String?
+
+    created_at DateTime? @db.Timestamptz(6)
+    created_by String?   @default("") @db.VarChar(50)
+    updated_at DateTime? @db.Timestamptz(6)
+    updated_by String?   @default("") @db.VarChar(50)
+    deleted_at DateTime? @db.Timestamptz(6)
+    deleted_by String?   @default("") @db.VarChar(50)
+
+    candidate          candidates                  @relation(fields: [candidate_id], references: [id], onDelete: Cascade, map: "fk_candidates_interview_enrollments")
+    program            programs                    @relation(fields: [program_id], references: [id], onDelete: Cascade, map: "fk_programs_interview_enrollments")
+    interview_schedule program_interview_schedules @relation(fields: [interview_schedule_id], references: [id], onDelete: Cascade, map: "fk_interview_schedule_enrollments")
+
+    @@unique([candidate_id, interview_schedule_id], map: "uniq_enrollment_candidate_schedule")
+    @@index([program_id, status], map: "idx_enrollment_program_status")
+    @@schema("academy")
+}
+
+model candidate_programs {
+    id           BigInt  @id @default(autoincrement())
+    id_candidate String  @db.Uuid
+    id_program   String  @db.Uuid
+    status       String? @default("register") @db.VarChar(50)
+
+    source_screening_id String?   @db.Uuid
+    assigned_by         String?   @db.VarChar(225)
+    assigned_at         DateTime? @db.Timestamptz(6)
+    assignment_reason   String?
+
+    created_at DateTime? @db.Timestamptz(6)
+    updated_at DateTime? @db.Timestamptz(6)
+    deleted_at DateTime? @db.Timestamptz(6)
+    deleted_by String?   @db.VarChar(225)
+
+    candidates candidates            @relation(fields: [id_candidate], references: [id], onDelete: Cascade, map: "fk_candidates_candidate_programs")
+    programs   programs              @relation(fields: [id_program], references: [id], onDelete: Cascade, map: "fk_programs_candidate_programs")
+    screening  candidate_screenings? @relation(fields: [source_screening_id], references: [id], onDelete: SetNull, map: "fk_candidate_programs_screening")
+
+    @@unique([id_candidate, id_program], map: "idx_candidate_program")
+    @@schema("academy")
+}
+
+model candidate_bookmark_webinars {
+    id           BigInt     @id @default(autoincrement())
+    id_candidate String     @db.Uuid
+    id_webinar   String     @db.Uuid
+    created_at   DateTime?  @db.Timestamptz(6)
+    updated_at   DateTime?  @db.Timestamptz(6)
+    candidates   candidates @relation(fields: [id_candidate], references: [id], onDelete: Cascade, map: "fk_candidates_candidate_bookmark_webinars")
+    webinars     webinars   @relation(fields: [id_webinar], references: [id], onDelete: Cascade, map: "fk_webinars_candidate_bookmark_webinars")
+
+    @@unique([id_candidate, id_webinar], map: "idx_candidates_webinars")
+    @@schema("academy")
+}

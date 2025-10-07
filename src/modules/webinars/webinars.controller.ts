@@ -7,6 +7,8 @@ import { CreateWebinarDto } from './dto/create-webinar.dto';
 import { UpdateWebinarDto } from './dto/update-webinar.dto';
 import { ListQueryDto } from '../../common/dto/list-query.dto';
 import { GenerateCodeDto } from './dto/generate-code.dto';
+import { AssignWebinarParticipantsDto } from './dto/assign-participants.dto';
+import { DetachWebinarParticipantsDto } from './dto/detach-participants.dto';
 
 @UseGuards(JwtAdminGuard, PermissionsGuard)
 @Controller('webinars') // <-- top-level
@@ -73,7 +75,13 @@ export class WebinarsController {
     return { message: 'Code generated', data: r };
   }
 
-  // GET /webinars/:id_webinar/participants  (webinar.participants.get)
+  // GET /webinars/:id_webinar/broadcast  (webinar.broadcast)
+  @Get(':id_webinar/broadcast')
+  @Permissions('webinar.broadcast')
+  async broadcastStandalone(@Param('id_webinar') id_webinar: string) {
+    return this.service.broadcastByWebinar(id_webinar);
+  }
+
   @Get(':id_webinar/participants')
   @Permissions('webinar.participants.get')
   async listParticipantsStandalone(
@@ -83,20 +91,24 @@ export class WebinarsController {
     return this.service.listParticipantsByWebinar(id_webinar, query as any);
   }
 
-  // DELETE /webinars/:id_webinar/participants/:id_candidate_webinar  (webinar.participants.delete)
-  @Delete(':id_webinar/participants/:id_candidate_webinar')
-  @Permissions('webinar.participants.delete')
-  async deleteParticipantStandalone(
-    @Param('id_webinar') _id_webinar: string, // kept in path for clarity
-    @Param('id_candidate_webinar') id_cw: string,
+  // PARTICIPANTS
+  @Post(':id_webinar/participants/assign')
+  @Permissions('webinar.participants.assign')
+  async assignParticipantsStandalone(
+    @Param('id_webinar') id_webinar: string,
+    @Body() dto: AssignWebinarParticipantsDto,
   ) {
-    return this.service.deleteParticipantById(id_cw);
+    const r = await this.service.assignParticipants(id_webinar, dto.candidateIds, (dto as any).status);
+    return { message: 'Webinar participants assignment processed.', data: { id_webinar, ...r } };
   }
 
-  // GET /webinars/:id_webinar/broadcast  (webinar.broadcast)
-  @Get(':id_webinar/broadcast')
-  @Permissions('webinar.broadcast')
-  async broadcastStandalone(@Param('id_webinar') id_webinar: string) {
-    return this.service.broadcastByWebinar(id_webinar);
+  @Post(':id_webinar/participants/detach')
+  @Permissions('webinar.participants.delete')
+  async detachParticipantsStandalone(
+    @Param('id_webinar') id_webinar: string,
+    @Body() dto: DetachWebinarParticipantsDto,
+  ) {
+    const r = await this.service.detachParticipants(id_webinar, (dto as any).candidateIds, );
+    return { message: 'Webinar participants detached.', data: { id_webinar, ...r } };
   }
 }

@@ -41,23 +41,16 @@ export class AdminsService {
       name: true,
       phone: true,
       photo: true,
-      email_verified: true,
-      email_verified_at: true,
       last_login: true,
-      is_creator: true,
-      is_consultant: true,
-      is_marketing: true,
       created_at: true,
       updated_at: true,
 
       // Join → select role fields only
       admin_roles: {
         select: {
-          // Use your actual relation name. If it's 'roles', keep below; if 'role', change accordingly.
           roles: { select: { id: true, title: true } },
-          // role: { select: { id: true, title: true } }, // <-- use this instead if singular
         },
-      },
+      where:{deleted_at: null}},
     };
 
     const admin = await this.prisma.admins.findFirst({
@@ -244,6 +237,7 @@ export class AdminsService {
                   },
                 },
               },
+            where:{deleted_at: null}
             },
           };
 
