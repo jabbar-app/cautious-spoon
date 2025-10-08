@@ -26,4 +26,10 @@ Relations
 - `candidates` *—* `programs` via `candidate_programs`
 - `candidates` *—* `webinars` via `candidate_webinars`
 
+### Business rules
+
+- Enrollment prerequisite: a candidate must have attended (status = present/attended) at least one eligible webinar before enrolling into a program.
+- Controllers must validate the prerequisite and return a 409/422 with guidance when unmet.
+- Admin override is optional and, if enabled, must be audited with actor and reason.
+
 

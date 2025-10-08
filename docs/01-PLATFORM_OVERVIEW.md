@@ -43,8 +43,9 @@ This document explains how the platform is organized, how users flow through eac
 Academy
 - Login: via Core SSO (JWT). Same identity usable across Talent/Vacancy.
 - Browse Programs: list/filter `academy.programs`; visibility and soft-delete respected.
-- Enroll: create join row in `academy.candidate_programs` linking `core.candidates` to an Academy program.
-- Attend Webinar: register in `academy.candidate_webinars`; webinar can be bound to a program or standalone.
+- Prerequisite: candidates must attend an eligible webinar before enrolling in a program.
+- Enroll: upon prerequisite met, create join row in `academy.candidate_programs` linking `core.candidates` to a program; otherwise return a clear error with next steps.
+- Attend Webinar: register in `academy.candidate_webinars`; webinar can be bound to a program or standalone; attendance status must be recorded.
 - Admin actions: create/update programs/webinars with permissions like `academy.program.create`, `academy.webinar.update`.
 
 Talent (later)

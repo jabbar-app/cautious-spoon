@@ -32,6 +32,7 @@ erDiagram
   PROGRAMS   ||--o{ CANDIDATE_PROGRAMS : includes
   CANDIDATES ||--o{ CANDIDATE_WEBINARS : registers
   WEBINARS   ||--o{ CANDIDATE_WEBINARS : includes
+  %% Business rule: enrollment requires prior webinar attendance
 ```
 
 
