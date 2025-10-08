@@ -27,6 +27,9 @@
 
 ## Project setup
 
+Platform docs
+- Overview: [docs/PLATFORM_OVERVIEW.md](docs/PLATFORM_OVERVIEW.md)
+
 ```bash
 $ npm install
 ```
