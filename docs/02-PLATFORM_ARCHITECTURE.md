@@ -79,6 +79,25 @@ erDiagram
 
   CANDIDATE ||--o{ ACADEMY_ENROLLMENT : enrolls
   PROGRAM   ||--o{ ACADEMY_ENROLLMENT : includes
+
+  %% Talent (illustrative)
+  CANDIDATE ||--o{ TALENT_PROFILE : owns
+  TALENT_PROFILE ||--o{ TALENT_SKILL : lists
+
+  %% Vacancy (illustrative)
+  EMPLOYER ||--o{ JOB_ORDER : posts
+  JOB_ORDER ||--o{ APPLICATION : receives
+  CANDIDATE ||--o{ APPLICATION : submits
 ```
+
+Notes on future entities (illustrative)
+
+- Talent
+  - `TALENT_PROFILE`: extends `core.candidates` with resume/profile fields
+  - `TALENT_SKILL`: skill records linked to `TALENT_PROFILE`
+- Vacancy
+  - `EMPLOYER`: entity or account that posts jobs
+  - `JOB_ORDER`: a job posting owned by `EMPLOYER`
+  - `APPLICATION`: a candidate’s application to a `JOB_ORDER` with lifecycle status
 
 

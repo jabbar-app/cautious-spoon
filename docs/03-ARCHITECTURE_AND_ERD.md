@@ -33,6 +33,25 @@ erDiagram
   CANDIDATES ||--o{ CANDIDATE_WEBINARS : registers
   WEBINARS   ||--o{ CANDIDATE_WEBINARS : includes
   %% Business rule: enrollment requires prior webinar attendance
+
+  %% Talent (illustrative future scope)
+  CANDIDATES ||--o{ TALENT_PROFILES : owns
+  TALENT_PROFILES ||--o{ TALENT_SKILLS : lists
+
+  %% Vacancy (illustrative future scope)
+  EMPLOYERS ||--o{ JOB_ORDERS : posts
+  CANDIDATES ||--o{ APPLICATIONS : submits
+  JOB_ORDERS ||--o{ APPLICATIONS : receives
 ```
+
+Illustrative future entities
+
+- Talent
+  - `TALENT_PROFILES` — 1:1 with `CANDIDATES` storing extended profile attributes
+  - `TALENT_SKILLS` — N:1 skills linked to `TALENT_PROFILES`
+- Vacancy
+  - `EMPLOYERS` — organizations or employer accounts that post jobs
+  - `JOB_ORDERS` — jobs created by employers
+  - `APPLICATIONS` — candidate applications to job orders, with statuses and timestamps
 
 

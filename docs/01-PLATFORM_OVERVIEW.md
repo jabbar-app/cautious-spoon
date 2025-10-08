@@ -162,7 +162,24 @@ erDiagram
   PROGRAMS   ||--o{ CANDIDATE_PROGRAMS : includes
   CANDIDATES ||--o{ CANDIDATE_WEBINARS : registers
   WEBINARS   ||--o{ CANDIDATE_WEBINARS : includes
+  %% Talent (illustrative)
+  CANDIDATES ||--o{ TALENT_PROFILES : owns
+  TALENT_PROFILES ||--o{ TALENT_SKILLS : lists
+  %% Vacancy (illustrative)
+  EMPLOYERS ||--o{ JOB_ORDERS : posts
+  CANDIDATES ||--o{ APPLICATIONS : submits
+  JOB_ORDERS ||--o{ APPLICATIONS : receives
 ```
+
+Future entities overview (illustrative)
+
+- Talent
+  - `TALENT_PROFILES`: one-to-one with `core.candidates` (extended profile, CV metadata, preferences)
+  - `TALENT_SKILLS`: many-to-one with `TALENT_PROFILES` (skill name, level, evidence)
+- Vacancy
+  - `EMPLOYERS`: hiring organization or employer account (owns job postings)
+  - `JOB_ORDERS`: many-to-one with `EMPLOYERS` (title, description, location, salary range, status)
+  - `APPLICATIONS`: many-to-one with `JOB_ORDERS` and `core.candidates` (status, submitted_at, screening notes)
 
 ### How to extend the platform
 
