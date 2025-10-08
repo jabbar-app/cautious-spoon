@@ -28,7 +28,15 @@
 ## Project setup
 
 Platform docs
-- Overview: [docs/PLATFORM_OVERVIEW.md](docs/PLATFORM_OVERVIEW.md)
+- Index (start here): [docs/INDEX.md](docs/INDEX.md)
+- 01 Overview: [docs/01-PLATFORM_OVERVIEW.md](docs/01-PLATFORM_OVERVIEW.md)
+- 02 Architecture: [docs/02-PLATFORM_ARCHITECTURE.md](docs/02-PLATFORM_ARCHITECTURE.md)
+- 03 Architecture + ERD: [docs/03-ARCHITECTURE_AND_ERD.md](docs/03-ARCHITECTURE_AND_ERD.md)
+- 04 Academy Architecture: [docs/04-ACADEMY_ARCHITECTURE.md](docs/04-ACADEMY_ARCHITECTURE.md)
+- 05 Prisma Multi-Schema: [docs/05-PRISMA_MULTI_SCHEMA.md](docs/05-PRISMA_MULTI_SCHEMA.md)
+- 06 ADR Index: [docs/06-ADR_INDEX.md](docs/06-ADR_INDEX.md)
+- 07 Executive Brief: [docs/07-EXECUTIVE_BRIEF.md](docs/07-EXECUTIVE_BRIEF.md)
+- 08 Product Backlog: [docs/08-PRODUCT_BACKLOG.md](docs/08-PRODUCT_BACKLOG.md)
 
 ```bash
 $ npm install

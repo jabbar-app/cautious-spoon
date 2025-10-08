@@ -2,6 +2,13 @@
 
 This document explains how the platform is organized, how users flow through each app, and the rationale behind architectural choices. It consolidates Core and all app flows into one place for stakeholders and engineers.
 
+### Executive summary (non-technical)
+
+- One login for all apps. Users sign in once (SSO) to Core and can access Academy, Talent, and Vacancy without re‑logging.
+- Shared foundation. Security, permissions, storage, email, and database are shared in a single platform to reduce duplication and speed up delivery.
+- Clear app boundaries. Each app owns its features and data schema while reusing Core users and permissions.
+- Start simple, grow safely. We begin with one backend (modular monolith) to move fast; later we can split services if scale demands it.
+
 ### What we are building
 
 - A multi-app platform consisting of:
@@ -101,6 +108,44 @@ flowchart LR
   TALENT --> CORE
   VACANCY --> CORE
   SSO --> CORE
+```
+
+SSO login flow
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as User
+  participant A as Frontend (Academy/Talent/Vacancy)
+  participant B as Backend (Core + Apps)
+  participant S as Core SSO
+  participant DB as Postgres
+
+  U->>A: Open app and click Login
+  A->>S: Redirect to Core SSO (/auth/login)
+  S->>DB: Verify credentials (admins/candidates)
+  DB-->>S: User record OK
+  S-->>A: Redirect back with auth code / tokens
+  A->>B: Exchange/attach JWT and call API
+  B->>B: Verify JWT, check RBAC permissions
+  B-->>A: Authorized response
+```
+
+Token refresh flow
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant A as Frontend
+  participant B as Backend
+  participant S as Core SSO
+
+  A->>B: API call with expired/expiring JWT
+  B-->>A: 401 (or advises refresh)
+  A->>S: Refresh token request
+  S-->>A: New JWT (and rotated refresh token)
+  A->>B: Retry API with new JWT
+  B-->>A: 200 OK
 ```
 
 Core + Academy ERD (summary)
