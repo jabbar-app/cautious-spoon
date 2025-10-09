@@ -45,7 +45,7 @@ Academy
 - Browse Programs: list/filter `academy.programs`; visibility and soft-delete respected.
 - Prerequisite: candidates must attend an eligible webinar before enrolling in a program.
 - Enroll: upon prerequisite met, create join row in `academy.candidate_programs` linking `core.candidates` to a program; otherwise return a clear error with next steps.
-- Attend Webinar: register in `academy.candidate_webinars`; webinar can be bound to a program or standalone; attendance status must be recorded.
+- Attend Webinar: register in `academy.candidate_webinars`; attendance is recorded via `status` and `attended_at`; webinars are not directly linked to programs — any association happens via screenings/assignment or interview flows.
 - Admin actions: create/update programs/webinars with permissions like `academy.program.create`, `academy.webinar.update`.
 
 Talent (later)
@@ -157,11 +157,19 @@ erDiagram
   ROLES  ||--o{ ADMIN_ROLES : includes
   ROLES  ||--o{ ROLE_PERMISSIONS : grants
   PERMISSIONS ||--o{ ROLE_PERMISSIONS : includes
-  PROGRAMS ||--o{ WEBINARS : schedules
   CANDIDATES ||--o{ CANDIDATE_PROGRAMS : enrolls
   PROGRAMS   ||--o{ CANDIDATE_PROGRAMS : includes
   CANDIDATES ||--o{ CANDIDATE_WEBINARS : registers
   WEBINARS   ||--o{ CANDIDATE_WEBINARS : includes
+  WEBINARS   ||--o{ WEBINAR_ATTENDANCE_CODES : has
+  CANDIDATES ||--o{ CANDIDATE_BOOKMARK_WEBINARS : bookmarks
+  WEBINARS   ||--o{ CANDIDATE_BOOKMARK_WEBINARS : bookmarked
+  CANDIDATES ||--o{ CANDIDATE_SCREENINGS : screened
+  WEBINARS   ||--o{ CANDIDATE_SCREENINGS : source
+  PROGRAMS   ||--o{ CANDIDATE_SCREENINGS : assigned
+  PROGRAMS   ||--o{ PROGRAM_INTERVIEW_SCHEDULES : has
+  PROGRAM_INTERVIEW_SCHEDULES ||--o{ PROGRAM_INTERVIEW_ENROLLMENTS : enrolls
+  CANDIDATES ||--o{ PROGRAM_INTERVIEW_ENROLLMENTS : attends
   %% Talent (illustrative)
   CANDIDATES ||--o{ TALENT_PROFILES : owns
   TALENT_PROFILES ||--o{ TALENT_SKILLS : lists
