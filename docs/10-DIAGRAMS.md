@@ -93,150 +93,150 @@ sequenceDiagram
 ```mermaid
 erDiagram
   ADMINS {
-    uuid id PK
-    varchar(225) email UNIQUE
-    varchar(225) password
-    varchar(225) name
-    varchar(225) phone
-    varchar(225) photo
-    timestamptz last_login
-    timestamptz created_at
-    timestamptz updated_at
-    timestamptz deleted_at
-    varchar(50) created_by
-    varchar(50) updated_by
-    varchar(50) deleted_by
+    string id PK
+    string email
+    string password
+    string name
+    string phone
+    string photo
+    datetime last_login
+    datetime created_at
+    datetime updated_at
+    datetime deleted_at
+    string created_by
+    string updated_by
+    string deleted_by
   }
   ADMIN_REFRESH_TOKENS {
-    uuid id PK
-    uuid admin_id FK->ADMINS.id
-    varchar(255) token_hash
-    timestamptz issued_at
-    timestamptz expires_at
-    timestamptz revoked_at
-    varchar(100) ip
-    varchar(255) user_agent
-    timestamptz created_at
+    string id PK
+    string admin_id FK
+    string token_hash
+    datetime issued_at
+    datetime expires_at
+    datetime revoked_at
+    string ip
+    string user_agent
+    datetime created_at
   }
   ROLES {
-    bigserial id PK
-    varchar title UNIQUE
-    varchar description
-    timestamptz created_at
-    timestamptz updated_at
-    timestamptz deleted_at
-    varchar(50) created_by
-    varchar(50) updated_by
-    varchar(50) deleted_by
+    int id PK
+    string title
+    string description
+    datetime created_at
+    datetime updated_at
+    datetime deleted_at
+    string created_by
+    string updated_by
+    string deleted_by
   }
   PERMISSIONS {
-    bigserial id PK
-    varchar title UNIQUE
-    varchar description
-    varchar dynamic_title
-    timestamptz created_at
-    timestamptz updated_at
-    timestamptz deleted_at
-    varchar(50) created_by
-    varchar(50) updated_by
-    varchar(50) deleted_by
+    int id PK
+    string title
+    string description
+    string dynamic_title
+    datetime created_at
+    datetime updated_at
+    datetime deleted_at
+    string created_by
+    string updated_by
+    string deleted_by
   }
   ROLE_PERMISSIONS {
-    bigint id_role FK->ROLES.id
-    bigint id_permission FK->PERMISSIONS.id
-    timestamptz created_at
-    timestamptz updated_at
-    timestamptz deleted_at
-    varchar(50) created_by
-    varchar(50) updated_by
-    varchar(50) deleted_by
+    int id_role FK
+    int id_permission FK
+    datetime created_at
+    datetime updated_at
+    datetime deleted_at
+    string created_by
+    string updated_by
+    string deleted_by
   }
   ADMIN_ROLES {
-    uuid id_admin FK->ADMINS.id
-    bigint id_role FK->ROLES.id
-    timestamptz created_at
-    timestamptz updated_at
-    timestamptz deleted_at
-    varchar(50) created_by
-    varchar(50) updated_by
-    varchar(50) deleted_by
+    uuid id_admin FK
+    int id_role FK
+    datetime created_at
+    datetime updated_at
+    datetime deleted_at
+    string created_by
+    string updated_by
+    string deleted_by
   }
   CANDIDATES {
-    uuid id PK
-    varchar(225) email UNIQUE
-    varchar(225) password
+    string id PK
+    string email
+    string password
     boolean onboarding
-    jsonb verified
-    varchar(100) talent_id
-    varchar(225) name
-    varchar(10) sex
-    jsonb address_info
-    jsonb birth_info
-    jsonb document
-    jsonb education
-    varchar(50) phone
-    varchar(225) marital_status
-    varchar(225) religion
+    json verified
+    string talent_id
+    string name
+    string sex
+    json address_info
+    json birth_info
+    json document
+    json education
+    string phone
+    string marital_status
+    string religion
     boolean email_verified
-    timestamptz email_verified_at
-    timestamptz last_login
+    datetime email_verified_at
+    datetime last_login
     int status
-    timestamptz created_at
-    timestamptz updated_at
-    timestamptz deleted_at
-    timestamptz password_updated_at
-    varchar(50) created_by
-    varchar(50) updated_by
-    varchar(50) deleted_by
+    datetime created_at
+    datetime updated_at
+    datetime deleted_at
+    datetime password_updated_at
+    string created_by
+    string updated_by
+    string deleted_by
   }
   CANDIDATE_REFRESH_TOKENS {
-    uuid id PK
-    uuid candidate_id FK->CANDIDATES.id
-    varchar(255) token_hash
-    timestamptz issued_at
-    timestamptz expires_at
-    timestamptz revoked_at
-    varchar(100) ip
-    varchar(255) user_agent
-    timestamptz created_at
+    string id PK
+    string candidate_id FK
+    string token_hash
+    datetime issued_at
+    datetime expires_at
+    datetime revoked_at
+    string ip
+    string user_agent
+    datetime created_at
   }
   CANDIDATE_SKILLS {
-    bigserial id PK
-    uuid id_candidate FK->CANDIDATES.id
-    varchar(225) name
-    varchar(50) tag
-    varchar certificate
-    varchar(100) level
-    timestamptz issue_date
+    int id PK
+    string id_candidate FK
+    string name
+    string tag
+    string certificate
+    string level
+    datetime issue_date
     boolean is_verified
-    timestamptz verification_date
-    varchar(50) id_admin_verificator
-    varchar(5) status
-    timestamptz created_at
-    timestamptz updated_at
-    timestamptz deleted_at
+    datetime verification_date
+    string id_admin_verificator
+    string status
+    datetime created_at
+    datetime updated_at
+    datetime deleted_at
   }
   CANDIDATE_WORK_EXPS {
-    bigserial id PK
-    uuid id_candidate FK->CANDIDATES.id
-    varchar(255) company
-    uuid occupation FK->OCCUPATIONS.id
-    uuid industry FK->INDUSTRIES.id
-    varchar(50) start_year
-    varchar(50) start_month
-    varchar(50) end_year
-    varchar(50) end_month
-    varchar so
-    varchar description
-    varchar certificate
-    varchar certificate_test
+    int id PK
+    string id_candidate FK
+    string company
+    string occupation
+    string industry
+    string start_year
+    string start_month
+    string end_year
+    string end_month
+    string so
+    string description
+    string certificate
+    string certificate_test
     boolean is_verified
-    varchar field
-    varchar(50) tag
-    varchar(5) status
-    timestamptz created_at
-    timestamptz updated_at
-    timestamptz deleted_at
+    string field
+    string tag
+    string status
+    datetime created_at
+    datetime updated_at
+    datetime deleted_at
   }
 
   ADMINS ||--o{ ADMIN_ROLES : has
@@ -253,143 +253,146 @@ erDiagram
 
 ```mermaid
 erDiagram
+  CANDIDATES {
+    string id PK
+  }
   PROGRAMS {
-    uuid id PK
-    varchar title
-    timestamptz registration_date
-    timestamptz program_start_date
-    varchar training_center
-    bigint capacity
-    varchar description
-    varchar photo
-    bigint price
-    bigint duration
-    varchar(225) category
-    varchar(50) status
+    string id PK
+    string title
+    datetime registration_date
+    datetime program_start_date
+    string training_center
+    int capacity
+    string description
+    string photo
+    int price
+    int duration
+    string category
+    string status
     boolean is_active
     boolean archived
-    text[] formulir
-    timestamptz created_at
-    varchar(225) created_by
-    timestamptz updated_at
-    varchar(225) updated_by
-    timestamptz deleted_at
-    varchar(225) deleted_by
+    string formulir
+    datetime created_at
+    string created_by
+    datetime updated_at
+    string updated_by
+    datetime deleted_at
+    string deleted_by
   }
   WEBINARS {
-    uuid id PK
-    varchar title
-    timestamptz registration_date
-    timestamptz webinar_date
-    bigint capacity
-    varchar description
-    varchar photo
-    varchar link
-    bigint price
-    bigint duration
-    text[] speakers
-    varchar category
-    varchar(50) status
+    string id PK
+    string title
+    datetime registration_date
+    datetime webinar_date
+    int capacity
+    string description
+    string photo
+    string link
+    int price
+    int duration
+    string speakers
+    string category
+    string status
     boolean is_visible
     boolean is_active
-    timestamptz created_at
-    varchar(225) created_by
-    timestamptz updated_at
-    varchar(225) updated_by
-    timestamptz deleted_at
-    varchar(225) deleted_by
+    datetime created_at
+    string created_by
+    datetime updated_at
+    string updated_by
+    datetime deleted_at
+    string deleted_by
   }
   CANDIDATE_PROGRAMS {
-    bigserial id PK
-    uuid id_candidate FK->CANDIDATES.id
-    uuid id_program FK->PROGRAMS.id
-    varchar(50) status
-    uuid source_screening_id FK->CANDIDATE_SCREENINGS.id
-    varchar(225) assigned_by
-    timestamptz assigned_at
-    varchar assignment_reason
-    timestamptz created_at
-    timestamptz updated_at
-    timestamptz deleted_at
-    varchar(225) deleted_by
+    int id PK
+    string id_candidate FK
+    string id_program FK
+    string status
+    string source_screening_id FK
+    string assigned_by
+    datetime assigned_at
+    string assignment_reason
+    datetime created_at
+    datetime updated_at
+    datetime deleted_at
+    string deleted_by
   }
   CANDIDATE_WEBINARS {
-    bigserial id PK
-    uuid id_candidate FK->CANDIDATES.id
-    uuid id_webinar FK->WEBINARS.id
-    varchar(50) status
-    timestamptz created_at
-    timestamptz updated_at
-    timestamptz deleted_at
-    timestamptz attended_at
+    int id PK
+    string id_candidate FK
+    string id_webinar FK
+    string status
+    datetime created_at
+    datetime updated_at
+    datetime deleted_at
+    datetime attended_at
   }
   WEBINAR_ATTENDANCE_CODES {
-    uuid id PK
-    uuid webinar_id FK->WEBINARS.id
-    varchar code
-    timestamptz valid_from
-    timestamptz valid_to
-    timestamptz created_at
-    varchar(50) created_by
-    timestamptz updated_at
-    varchar(50) updated_by
-    timestamptz deleted_at
-    varchar(50) deleted_by
+    string id PK
+    string webinar_id FK
+    string code
+    datetime valid_from
+    datetime valid_to
+    datetime created_at
+    string created_by
+    datetime updated_at
+    string updated_by
+    datetime deleted_at
+    string deleted_by
   }
   CANDIDATE_BOOKMARK_WEBINARS {
-    bigserial id PK
-    uuid id_candidate FK->CANDIDATES.id
-    uuid id_webinar FK->WEBINARS.id
-    timestamptz created_at
-    timestamptz updated_at
+    int id PK
+    string id_candidate FK
+    string id_webinar FK
+    datetime created_at
+    datetime updated_at
   }
   CANDIDATE_SCREENINGS {
-    uuid id PK
-    uuid candidate_id FK->CANDIDATES.id
-    uuid webinar_id FK->WEBINARS.id NULLABLE
-    varchar(50) stage
+    string id PK
+    string candidate_id FK
+    string webinar_id FK
+    string stage
     boolean is_passed_test
     boolean is_matches_requirement
-    varchar reject_reason_matches
-    varchar reject_reason_not_passed
-    uuid assigned_program_id FK->PROGRAMS.id NULLABLE
-    varchar(225) assigned_by
-    timestamptz assigned_at
-    timestamptz created_at
-    timestamptz updated_at
-    timestamptz deleted_at
-    varchar(50) created_by
-    varchar(50) updated_by
-    varchar(50) deleted_by
+    string reject_reason_matches
+    string reject_reason_not_passed
+    string assigned_program_id FK
+    string assigned_by
+    datetime assigned_at
+    datetime created_at
+    datetime updated_at
+    datetime deleted_at
+    string created_by
+    string updated_by
+    string deleted_by
   }
   PROGRAM_INTERVIEW_SCHEDULES {
-    uuid id PK
-    uuid program_id FK->PROGRAMS.id
-    varchar(50) type
-    varchar link
-    varchar location_label
-    timestamptz start_at
-    timestamptz end_at
+    string id PK
+    string program_id FK
+    string type
+    string link
+    string location_label
+    datetime start_at
+    datetime end_at
     boolean is_active
-    timestamptz created_at
-    timestamptz updated_at
-    timestamptz deleted_at
+    datetime created_at
+    datetime updated_at
+    datetime deleted_at
   }
   PROGRAM_INTERVIEW_ENROLLMENTS {
-    uuid id PK
-    uuid candidate_id FK->CANDIDATES.id
-    uuid program_id FK->PROGRAMS.id
-    uuid interview_schedule_id FK->PROGRAM_INTERVIEW_SCHEDULES.id
-    varchar(50) status
+    string id PK
+    string candidate_id FK
+    string program_id FK
+    string interview_schedule_id FK
+    string status
     boolean passed
-    jsonb score
-    varchar notes
-    timestamptz created_at
-    varchar(50) created_by
-    timestamptz updated_at
-    varchar(50) updated_by
-    timestamptz deleted_at
-    varchar(50) deleted_by
+    json score
+    string notes
+    datetime created_at
+    string created_by
+    datetime updated_at
+    string updated_by
+    datetime deleted_at
+    string deleted_by
   }
 
   CANDIDATES ||--o{ CANDIDATE_PROGRAMS : enrolls
@@ -405,6 +408,61 @@ erDiagram
   PROGRAMS   ||--o{ PROGRAM_INTERVIEW_SCHEDULES : has
   PROGRAM_INTERVIEW_SCHEDULES ||--o{ PROGRAM_INTERVIEW_ENROLLMENTS : enrolls
   CANDIDATES ||--o{ PROGRAM_INTERVIEW_ENROLLMENTS : attends
+```
+
+### ERD (Talent) — Placeholder
+
+```mermaid
+erDiagram
+  CANDIDATES {
+    string id PK
+    string email
+  }
+  TALENT_PROFILES {
+    string id PK
+    string candidate_id FK
+    json profile_data
+  }
+  TALENT_SKILLS {
+    int id PK
+    string profile_id FK
+    string name
+    string level
+  }
+
+  CANDIDATES ||--|| TALENT_PROFILES : owns
+  TALENT_PROFILES ||--o{ TALENT_SKILLS : lists
+```
+
+### ERD (Vacancy) — Placeholder
+
+```mermaid
+erDiagram
+  EMPLOYERS {
+    string id PK
+    string name
+  }
+  JOB_ORDERS {
+    string id PK
+    string employer_id FK
+    string title
+    string status
+  }
+  APPLICATIONS {
+    string id PK
+    string job_order_id FK
+    string candidate_id FK
+    string status
+    datetime submitted_at
+  }
+  CANDIDATES {
+    string id PK
+    string email
+  }
+
+  EMPLOYERS ||--o{ JOB_ORDERS : posts
+  JOB_ORDERS ||--o{ APPLICATIONS : receives
+  CANDIDATES ||--o{ APPLICATIONS : submits
 ```
 
 
